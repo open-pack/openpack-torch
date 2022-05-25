@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "openpack-torch"
+version = "0.1.0"
+description = "PyTorch extention to work around with OpenPack dataset"
+authors = ["Yoshimura Naoya <yoshimura.naoya@ist.osaka-u.ac.jp>"]
+
+[tool.poetry.dependencies]
+python = ">=3.7.11"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
