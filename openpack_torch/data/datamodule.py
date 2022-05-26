@@ -1,4 +1,8 @@
 """Utilities for PyTorch Lightning DataModule.
+
+Todo:
+    * Add usage (Example Section).
+    * Add unit-test.
 """
 from logging import getLogger
 from pathlib import Path
@@ -80,7 +84,7 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         datasets = dict()
         for user_id, session_id in user_session:
             key = f"U{user_id:0=4}-S{session_id:0=4}"
-            datasets[key] = self.detaset_class(
+            datasets[key] = self.dataset_class(
                 rootdir, [(user_id, session_id)], **kwargs)
         return datasets
 
@@ -90,7 +94,7 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         kwargs = self.get_kwargs_for_datasets()
 
         if stage in (None, "fit"):
-            self.op_train = self.detaset_class(rootdir, split.train, **kwargs)
+            self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
         else:
             self.op_train = None
 
