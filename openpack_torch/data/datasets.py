@@ -227,8 +227,8 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
     def __init__(
             self,
             rootdir: Path,
-            keypoint_type: str,
             user_session: Tuple[Tuple[int, int], ...],
+            keypoint_type: str = None,
             debug: bool = False,
             window: int = 15 * 60,
             submission: bool = False,
