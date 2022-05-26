@@ -152,7 +152,7 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
 
     def submission_dataloader(self) -> List[DataLoader]:
         dataloaders = []
-        for key, dataset in self.op_test.items():
+        for key, dataset in self.op_submission.items():
             dataloaders.append(
                 DataLoader(
                     dataset,
