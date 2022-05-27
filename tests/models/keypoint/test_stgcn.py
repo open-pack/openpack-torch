@@ -118,7 +118,7 @@ def test_STGCN4Seg__01():
     A = get_adjacency_matrix(layout="MSCOCO", hop_size=Ks - 1)
     print("A:", A.shape)
 
-    model = STGCN4Seg(num_classes, in_channels, Ks=Ks, Kt=Kt, A=A)
+    model = STGCN4Seg(in_channels, num_classes, Ks=Ks, Kt=Kt, A=A)
     print(model)
 
     # -- Forward --

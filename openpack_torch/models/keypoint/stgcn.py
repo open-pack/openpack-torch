@@ -118,8 +118,8 @@ class STGCN4Seg(nn.Module):
 
     def __init__(
             self,
-            num_classes: int = None,
             in_channels: int = None,
+            num_classes: int = None,
             Ks: int = None,
             Kt: int = None,
             A: np.ndarray = None,

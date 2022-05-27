@@ -1,0 +1,36 @@
+defaults:
+  - _self_
+  - model: st-gcn
+  - dataset: openpack-keypoint
+  - override hydra/job_logging: custom
+  # - override hydra/hydra_logging: disabled
+datarootdir: /home/bob/data
+issue: "I01-EXP1-V1"
+hydra:
+  run:
+    dir: ${volume.logdir.rootdir}
+  job:
+    chdir: true
+debug: true
+mode: "test"
+train:
+  num_workers: 3
+  batch_size: 32
+  epochs: 100
+  window: 900 # 15Hz * 60s
+  optimizer:
+    type: "Adam"
+    lr: 0.001
+    weight_decay: 0.0001
+  debug:
+    batch_size: 8
+    epochs: 5
+volume:
+  logdir:
+    rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
+    model: ${volume.logdir.rootdir}/model.pth
+    predict: ${volume.logdir.rootdir}/pred/U{user:0=4}-S{session:0=4}
+    summary: ${volume.logdir.rootdir}/summary.csv
+
+
+
