@@ -7,16 +7,14 @@ from typing import Dict
 
 import hydra
 import numpy as np
-# import openpack_toolkit as optk
 import openpack_torch as optorch
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig, OmegaConf
-from openpack_toolkit import \
-    OPENPACK_WORKPROCESS_CLASSES as OPENPACK_OPERATION_CLASSES
-from openpack_toolkit.codalab.workprocess_segmentation import (
-    construct_submission_dict, eval_workprocess_segmentation_wrapper,
+from openpack_toolkit import OPENPACK_OPERATIONS
+from openpack_toolkit.codalab.operation_segmentation import (
+    construct_submission_dict, eval_operation_segmentation_wrapper,
     make_submission_zipfile)
 
 logger = getLogger(__name__)
@@ -221,8 +219,8 @@ def test(cfg: DictConfig, mode: str = "test"):
 
     if mode == "test":
         # save performance summary
-        df_summary = eval_workprocess_segmentation_wrapper(
-            outputs, OPENPACK_OPERATION_CLASSES,
+        df_summary = eval_operation_segmentation_wrapper(
+            outputs, OPENPACK_OPERATIONS,
         )
         path = Path(cfg.volume.logdir.summary)
         df_summary.to_csv(path, index=False)
@@ -230,7 +228,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     elif mode == "submission":
         # make submission file
         submission_dict = construct_submission_dict(
-            outputs, OPENPACK_OPERATION_CLASSES)
+            outputs, OPENPACK_OPERATIONS)
         make_submission_zipfile(submission_dict, logdir)
 
 
@@ -240,10 +238,6 @@ def main(cfg: DictConfig):
     print("===== Params =====")
     print(OmegaConf.to_yaml(cfg))
     print("==================")
-    pl.seed_everything(42, workers=True)
-    logger.debug(f"check = {Path.cwd()}")
-    print(f'Orig working directory : {hydra.utils.get_original_cwd()}')
-    print(cfg.volume.logdir.rootdir)
 
     if cfg.mode == "train":
         train(cfg)
