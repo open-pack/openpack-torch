@@ -1,8 +1,7 @@
 from pathlib import Path
 
 import numpy as np
-from openpack_toolkit import \
-    OPENPACK_WORKPROCESS_CLASSES as OPENPACK_OPERATION_CLASSES
+from openpack_toolkit import OPENPACK_OPERATIONS
 from openpack_torch.data.datasets import OpenPackImu, OpenPackKeypoint
 
 
@@ -47,7 +46,7 @@ def test_OpenPackImu_02():
 
         np.testing.assert_array_equal(x.size(), (6, 1800, 1))
         assert t_set <= set(
-            [0, OPENPACK_OPERATION_CLASSES.get_ignore_class_index()])
+            [0, OPENPACK_OPERATIONS.get_ignore_class_index()])
 
 # -----------------------------------------------------------------------------
 
@@ -59,8 +58,8 @@ def test_OpenPackKeypoint_01():
 
     dataset = OpenPackKeypoint(
         rootdir,
-        keypoint_type,
         user_session,
+        keypoint_type=keypoint_type,
         window=30)
     print("Dataset:", dataset)
 

@@ -7,8 +7,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import openpack_toolkit as optk
 import torch
-from openpack_toolkit import \
-    OPENPACK_WORKPROCESS_CLASSES as OPENPACK_OPERATION_CLASSES
+from openpack_toolkit import OPENPACK_OPERATIONS
 
 logger = getLogger(__name__)
 
@@ -43,7 +42,7 @@ class OpenPackImu(torch.utils.data.Dataset):
             debug: bool = False,
             window: int = 30 * 60,
             submission: bool = False,
-            classes: optk.ActSet = OPENPACK_OPERATION_CLASSES,
+            classes: optk.ActSet = OPENPACK_OPERATIONS,
     ) -> None:
         """Initialize OpenPackImu dataset class.
 
@@ -232,7 +231,7 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
             debug: bool = False,
             window: int = 15 * 60,
             submission: bool = False,
-            classes: optk.ActSet = OPENPACK_OPERATION_CLASSES,
+            classes: optk.ActSet = OPENPACK_OPERATIONS,
     ) -> None:
         """Initialize OpenPackKyepoint dataset class.
 
