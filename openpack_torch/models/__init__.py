@@ -1,3 +1,3 @@
-from . import imu
+from . import imu, keypoint
 
-__all__ = ["imu"]
+__all__ = ["imu", "keypoint"]
