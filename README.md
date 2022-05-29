@@ -11,10 +11,10 @@ You can install via pip with the following command.
 
 ```bash
 # Pip
-pip install openpack-toolkit
+pip install openpack-torch
 
 # Poetry
-poetry add  openpack-toolkit
+poetry add  openpack-torch
 ```
 
 ## Docs
