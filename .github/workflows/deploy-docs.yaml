@@ -29,6 +29,7 @@ jobs:
       # pdocでドキュメントを生成
       - name: Pdoc
         run: |
+          export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
           poetry run pdoc --html --output-dir docs --force openpack_torch
 
       - name: Deploy
