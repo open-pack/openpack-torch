@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.10.0" />
+<title>openpack_torch.data.datamodule API documentation</title>
+<meta name="description" content="Utilities for PyTorch Lightning DataModule …" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>openpack_torch.data.datamodule</code></h1>
+</header>
+<section id="section-intro">
+<p>Utilities for PyTorch Lightning DataModule.</p>
+<h2 id="todo">Todo</h2>
+<ul>
+<li>Add usage (Example Section).</li>
+<li>Add unit-test.</li>
+</ul>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">&#34;&#34;&#34;Utilities for PyTorch Lightning DataModule.
+
+Todo:
+    * Add usage (Example Section).
+    * Add unit-test.
+&#34;&#34;&#34;
+from logging import getLogger
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import pytorch_lightning as pl
+import torch
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader
+
+logger = getLogger(__name__)
+
+
+class OpenPackBaseDataModule(pl.LightningDataModule):
+    &#34;&#34;&#34;Base class of PyTorch Lightning DataModule.
+    A datamodule is a shareable, reusable class that encapsulates all the steps needed to process
+    data:
+
+    Attributes:
+        dataset_class (torch.utils.data.Dataset): dataset class. this variable is call to create
+            dataset instances.
+        cfg (DictConfig): config object. The all parameters used to initialuze dataset class should
+            be included in this object.
+        batch_size (int): batch size.
+        debug (bool): If True, enable debug mode.
+    &#34;&#34;&#34;
+    dataset_class: torch.utils.data.Dataset
+
+    def __init__(self, cfg: DictConfig):
+        super().__init__()
+        self.cfg = cfg
+
+        if cfg.debug:
+            self.debug = True
+            self.batch_size = cfg.train.debug.batch_size
+        else:
+            self.debug = True
+            self.batch_size = cfg.train.batch_size
+
+    def get_kwargs_for_datasets(self) -&gt; Dict:
+        &#34;&#34;&#34;Build a kwargs to initialize dataset class. This method is called in ``setup()``.
+
+        Example:
+
+            ::
+
+                def get_kwargs_for_datasets(self) -&gt; Dict:
+                    kwargs = {
+                        &#34;imu_nodes&#34;: self.cfg.dataset.imu_nodes,
+                        &#34;use_acc&#34;: self.cfg.dataset.use_acc,
+                        &#34;use_gyro&#34;: self.cfg.dataset.use_gyro,
+                        &#34;use_quat&#34;: self.cfg.dataset.use_quat,
+                        &#34;window&#34;: self.cfg.train.window,
+                        &#34;debug&#34;: self.cfg.debug,
+                    }
+                    return kwargs
+
+        Returns:
+            Dict:
+        &#34;&#34;&#34;
+        raise NotImplementedError()
+
+    def _init_datasets(
+        self,
+        rootdir: Path,
+        user_session: Tuple[int, int],
+        kwargs: Dict,
+    ) -&gt; Dict[str, torch.utils.data.Dataset]:
+        &#34;&#34;&#34;Returns list of initialized dataset object.
+
+        Args:
+            rootdir (Path): _description_
+            user_session (Tuple[int, int]): _description_
+            kwargs (Dict): _description_
+
+        Returns:
+            Dict[str, torch.utils.data.Dataset]: dataset objects
+        &#34;&#34;&#34;
+        datasets = dict()
+        for user_id, session_id in user_session:
+            key = f&#34;U{user_id:0=4}-S{session_id:0=4}&#34;
+            datasets[key] = self.dataset_class(
+                rootdir, [(user_id, session_id)], **kwargs)
+        return datasets
+
+    def setup(self, stage: Optional[str] = None) -&gt; None:
+        rootdir = Path(self.cfg.dataset.volume.rootdir)
+        split = self.cfg.dataset.split
+        kwargs = self.get_kwargs_for_datasets()
+
+        if stage in (None, &#34;fit&#34;):
+            self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
+        else:
+            self.op_train = None
+
+        if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
+            self.op_val = self._init_datasets(rootdir, split.val, kwargs)
+        else:
+            self.op_val = None
+
+        if stage in (None, &#34;test&#34;):
+            self.op_test = self._init_datasets(rootdir, split.test, kwargs)
+        else:
+            self.op_test = None
+
+        if stage in (None, &#34;submission&#34;):
+            self.op_submission = self._init_datasets(
+                rootdir, split.submission, kwargs)
+        else:
+            self.op_submission = None
+
+        logger.info(f&#34;dataset[train]: {self.op_train}&#34;)
+        logger.info(f&#34;dataset[val]: {self.op_val}&#34;)
+        logger.info(f&#34;dataset[test]: {self.op_test}&#34;)
+        logger.info(f&#34;dataset[submission]: {self.op_submission}&#34;)
+
+    def train_dataloader(self) -&gt; DataLoader:
+        return DataLoader(
+            self.op_train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.cfg.train.num_workers)
+
+    def val_dataloader(self) -&gt; List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.op_val.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers)
+            )
+        return dataloaders
+
+    def test_dataloader(self) -&gt; List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.op_test.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers)
+            )
+        return dataloaders
+
+    def submission_dataloader(self) -&gt; List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.op_submission.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers)
+            )
+        return dataloaders</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule"><code class="flex name class">
+<span>class <span class="ident">OpenPackBaseDataModule</span></span>
+<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Base class of PyTorch Lightning DataModule.
+A datamodule is a shareable, reusable class that encapsulates all the steps needed to process
+data:</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>dataset_class</code></strong> :&ensp;<code>torch.utils.data.Dataset</code></dt>
+<dd>dataset class. this variable is call to create
+dataset instances.</dd>
+<dt><strong><code>cfg</code></strong> :&ensp;<code>DictConfig</code></dt>
+<dd>config object. The all parameters used to initialuze dataset class should
+be included in this object.</dd>
+<dt><strong><code>batch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>batch size.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code></dt>
+<dd>If True, enable debug mode.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class OpenPackBaseDataModule(pl.LightningDataModule):
+    &#34;&#34;&#34;Base class of PyTorch Lightning DataModule.
+    A datamodule is a shareable, reusable class that encapsulates all the steps needed to process
+    data:
+
+    Attributes:
+        dataset_class (torch.utils.data.Dataset): dataset class. this variable is call to create
+            dataset instances.
+        cfg (DictConfig): config object. The all parameters used to initialuze dataset class should
+            be included in this object.
+        batch_size (int): batch size.
+        debug (bool): If True, enable debug mode.
+    &#34;&#34;&#34;
+    dataset_class: torch.utils.data.Dataset
+
+    def __init__(self, cfg: DictConfig):
+        super().__init__()
+        self.cfg = cfg
+
+        if cfg.debug:
+            self.debug = True
+            self.batch_size = cfg.train.debug.batch_size
+        else:
+            self.debug = True
+            self.batch_size = cfg.train.batch_size
+
+    def get_kwargs_for_datasets(self) -&gt; Dict:
+        &#34;&#34;&#34;Build a kwargs to initialize dataset class. This method is called in ``setup()``.
+
+        Example:
+
+            ::
+
+                def get_kwargs_for_datasets(self) -&gt; Dict:
+                    kwargs = {
+                        &#34;imu_nodes&#34;: self.cfg.dataset.imu_nodes,
+                        &#34;use_acc&#34;: self.cfg.dataset.use_acc,
+                        &#34;use_gyro&#34;: self.cfg.dataset.use_gyro,
+                        &#34;use_quat&#34;: self.cfg.dataset.use_quat,
+                        &#34;window&#34;: self.cfg.train.window,
+                        &#34;debug&#34;: self.cfg.debug,
+                    }
+                    return kwargs
+
+        Returns:
+            Dict:
+        &#34;&#34;&#34;
+        raise NotImplementedError()
+
+    def _init_datasets(
+        self,
+        rootdir: Path,
+        user_session: Tuple[int, int],
+        kwargs: Dict,
+    ) -&gt; Dict[str, torch.utils.data.Dataset]:
+        &#34;&#34;&#34;Returns list of initialized dataset object.
+
+        Args:
+            rootdir (Path): _description_
+            user_session (Tuple[int, int]): _description_
+            kwargs (Dict): _description_
+
+        Returns:
+            Dict[str, torch.utils.data.Dataset]: dataset objects
+        &#34;&#34;&#34;
+        datasets = dict()
+        for user_id, session_id in user_session:
+            key = f&#34;U{user_id:0=4}-S{session_id:0=4}&#34;
+            datasets[key] = self.dataset_class(
+                rootdir, [(user_id, session_id)], **kwargs)
+        return datasets
+
+    def setup(self, stage: Optional[str] = None) -&gt; None:
+        rootdir = Path(self.cfg.dataset.volume.rootdir)
+        split = self.cfg.dataset.split
+        kwargs = self.get_kwargs_for_datasets()
+
+        if stage in (None, &#34;fit&#34;):
+            self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
+        else:
+            self.op_train = None
+
+        if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
+            self.op_val = self._init_datasets(rootdir, split.val, kwargs)
+        else:
+            self.op_val = None
+
+        if stage in (None, &#34;test&#34;):
+            self.op_test = self._init_datasets(rootdir, split.test, kwargs)
+        else:
+            self.op_test = None
+
+        if stage in (None, &#34;submission&#34;):
+            self.op_submission = self._init_datasets(
+                rootdir, split.submission, kwargs)
+        else:
+            self.op_submission = None
+
+        logger.info(f&#34;dataset[train]: {self.op_train}&#34;)
+        logger.info(f&#34;dataset[val]: {self.op_val}&#34;)
+        logger.info(f&#34;dataset[test]: {self.op_test}&#34;)
+        logger.info(f&#34;dataset[submission]: {self.op_submission}&#34;)
+
+    def train_dataloader(self) -&gt; DataLoader:
+        return DataLoader(
+            self.op_train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.cfg.train.num_workers)
+
+    def val_dataloader(self) -&gt; List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.op_val.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers)
+            )
+        return dataloaders
+
+    def test_dataloader(self) -&gt; List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.op_test.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers)
+            )
+        return dataloaders
+
+    def submission_dataloader(self) -&gt; List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.op_submission.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers)
+            )
+        return dataloaders</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>pytorch_lightning.core.datamodule.LightningDataModule</li>
+<li>pytorch_lightning.core.hooks.CheckpointHooks</li>
+<li>pytorch_lightning.core.hooks.DataHooks</li>
+<li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule.dataset_class"><code class="name">var <span class="ident">dataset_class</span> : torch.utils.data.dataset.Dataset</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule.get_kwargs_for_datasets"><code class="name flex">
+<span>def <span class="ident">get_kwargs_for_datasets</span></span>(<span>self) ‑> Dict</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Build a kwargs to initialize dataset class. This method is called in <code>setup()</code>.</p>
+<h2 id="example">Example</h2>
+<p>::</p>
+<pre><code>def get_kwargs_for_datasets(self) -&gt; Dict:
+    kwargs = {
+        "imu_nodes": self.cfg.dataset.imu_nodes,
+        "use_acc": self.cfg.dataset.use_acc,
+        "use_gyro": self.cfg.dataset.use_gyro,
+        "use_quat": self.cfg.dataset.use_quat,
+        "window": self.cfg.train.window,
+        "debug": self.cfg.debug,
+    }
+    return kwargs
+</code></pre>
+<h2 id="returns">Returns</h2>
+<p>Dict:</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_kwargs_for_datasets(self) -&gt; Dict:
+    &#34;&#34;&#34;Build a kwargs to initialize dataset class. This method is called in ``setup()``.
+
+    Example:
+
+        ::
+
+            def get_kwargs_for_datasets(self) -&gt; Dict:
+                kwargs = {
+                    &#34;imu_nodes&#34;: self.cfg.dataset.imu_nodes,
+                    &#34;use_acc&#34;: self.cfg.dataset.use_acc,
+                    &#34;use_gyro&#34;: self.cfg.dataset.use_gyro,
+                    &#34;use_quat&#34;: self.cfg.dataset.use_quat,
+                    &#34;window&#34;: self.cfg.train.window,
+                    &#34;debug&#34;: self.cfg.debug,
+                }
+                return kwargs
+
+    Returns:
+        Dict:
+    &#34;&#34;&#34;
+    raise NotImplementedError()</code></pre>
+</details>
+</dd>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule.setup"><code class="name flex">
+<span>def <span class="ident">setup</span></span>(<span>self, stage: Optional[str] = None) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Called at the beginning of fit (train + validate), validate, test, or predict. This is a good hook when
+you need to build models dynamically or adjust something about them. This hook is called on every process
+when using DDP.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>stage</code></strong></dt>
+<dd>either <code>'fit'</code>, <code>'validate'</code>, <code>'test'</code>, or <code>'predict'</code></dd>
+</dl>
+<p>Example::</p>
+<pre><code>class LitModel(...):
+    def __init__(self):
+        self.l1 = None
+
+    def prepare_data(self):
+        download_data()
+        tokenize()
+
+        # don't do this
+        self.something = else
+
+    def setup(self, stage):
+        data = load_data(...)
+        self.l1 = nn.Linear(28, data.num_classes)
+</code></pre></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def setup(self, stage: Optional[str] = None) -&gt; None:
+    rootdir = Path(self.cfg.dataset.volume.rootdir)
+    split = self.cfg.dataset.split
+    kwargs = self.get_kwargs_for_datasets()
+
+    if stage in (None, &#34;fit&#34;):
+        self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
+    else:
+        self.op_train = None
+
+    if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
+        self.op_val = self._init_datasets(rootdir, split.val, kwargs)
+    else:
+        self.op_val = None
+
+    if stage in (None, &#34;test&#34;):
+        self.op_test = self._init_datasets(rootdir, split.test, kwargs)
+    else:
+        self.op_test = None
+
+    if stage in (None, &#34;submission&#34;):
+        self.op_submission = self._init_datasets(
+            rootdir, split.submission, kwargs)
+    else:
+        self.op_submission = None
+
+    logger.info(f&#34;dataset[train]: {self.op_train}&#34;)
+    logger.info(f&#34;dataset[val]: {self.op_val}&#34;)
+    logger.info(f&#34;dataset[test]: {self.op_test}&#34;)
+    logger.info(f&#34;dataset[submission]: {self.op_submission}&#34;)</code></pre>
+</details>
+</dd>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule.submission_dataloader"><code class="name flex">
+<span>def <span class="ident">submission_dataloader</span></span>(<span>self) ‑> List[torch.utils.data.dataloader.DataLoader]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def submission_dataloader(self) -&gt; List[DataLoader]:
+    dataloaders = []
+    for key, dataset in self.op_submission.items():
+        dataloaders.append(
+            DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.cfg.train.num_workers)
+        )
+    return dataloaders</code></pre>
+</details>
+</dd>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule.test_dataloader"><code class="name flex">
+<span>def <span class="ident">test_dataloader</span></span>(<span>self) ‑> List[torch.utils.data.dataloader.DataLoader]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Implement one or multiple PyTorch DataLoaders for testing.</p>
+<p>For data processing use the following pattern:</p>
+<pre><code>- download in :meth:&lt;code&gt;prepare\_data&lt;/code&gt;
+- process and split in :meth:&lt;code&gt;setup&lt;/code&gt;
+</code></pre>
+<p>However, the above are only necessary for distributed processing.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning:&ensp;do not assign state in prepare_data</p>
+</div>
+<ul>
+<li>:meth:<code>~pytorch_lightning.trainer.trainer.Trainer.test</code></li>
+<li>:meth:<code>prepare_data</code></li>
+<li>:meth:<code>setup</code></li>
+</ul>
+<h2 id="note">Note</h2>
+<p>Lightning adds the correct sampler for distributed and arbitrary hardware.
+There is no need to set it yourself.</p>
+<h2 id="return">Return</h2>
+<p>A :class:<code>torch.utils.data.DataLoader</code> or a sequence of them specifying testing samples.</p>
+<p>Example::</p>
+<pre><code>def test_dataloader(self):
+    transform = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.5,), (1.0,))])
+    dataset = MNIST(root='/path/to/mnist/', train=False, transform=transform,
+                    download=True)
+    loader = torch.utils.data.DataLoader(
+        dataset=dataset,
+        batch_size=self.batch_size,
+        shuffle=False
+    )
+
+    return loader
+
+# can also return multiple dataloaders
+def test_dataloader(self):
+    return [loader_a, loader_b, ..., loader_n]
+</code></pre>
+<h2 id="note_1">Note</h2>
+<p>If you don't need a test dataset and a :meth:<code>test_step</code>, you don't need to implement
+this method.</p>
+<h2 id="note_2">Note</h2>
+<p>In the case where you return multiple test dataloaders, the :meth:<code>test_step</code>
+will have an argument <code>dataloader_idx</code> which matches the order here.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_dataloader(self) -&gt; List[DataLoader]:
+    dataloaders = []
+    for key, dataset in self.op_test.items():
+        dataloaders.append(
+            DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.cfg.train.num_workers)
+        )
+    return dataloaders</code></pre>
+</details>
+</dd>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule.train_dataloader"><code class="name flex">
+<span>def <span class="ident">train_dataloader</span></span>(<span>self) ‑> torch.utils.data.dataloader.DataLoader</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Implement one or more PyTorch DataLoaders for training.</p>
+<h2 id="return">Return</h2>
+<p>A collection of :class:<code>torch.utils.data.DataLoader</code> specifying training samples.
+In the case of multiple dataloaders, please see this :ref:<code>section &lt;multiple-dataloaders&gt;</code>.</p>
+<p>The dataloader you return will not be reloaded unless you set
+:paramref:<code>~pytorch_lightning.trainer.Trainer.reload_dataloaders_every_n_epochs</code> to
+a positive integer.</p>
+<p>For data processing use the following pattern:</p>
+<pre><code>- download in :meth:&lt;code&gt;prepare\_data&lt;/code&gt;
+- process and split in :meth:&lt;code&gt;setup&lt;/code&gt;
+</code></pre>
+<p>However, the above are only necessary for distributed processing.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning:&ensp;do not assign state in prepare_data</p>
+</div>
+<ul>
+<li>:meth:<code>~pytorch_lightning.trainer.trainer.Trainer.fit</code></li>
+<li>:meth:<code>prepare_data</code></li>
+<li>:meth:<code>setup</code></li>
+</ul>
+<h2 id="note">Note</h2>
+<p>Lightning adds the correct sampler for distributed and arbitrary hardware.
+There is no need to set it yourself.</p>
+<p>Example::</p>
+<pre><code># single dataloader
+def train_dataloader(self):
+    transform = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.5,), (1.0,))])
+    dataset = MNIST(root='/path/to/mnist/', train=True, transform=transform,
+                    download=True)
+    loader = torch.utils.data.DataLoader(
+        dataset=dataset,
+        batch_size=self.batch_size,
+        shuffle=True
+    )
+    return loader
+
+# multiple dataloaders, return as list
+def train_dataloader(self):
+    mnist = MNIST(...)
+    cifar = CIFAR(...)
+    mnist_loader = torch.utils.data.DataLoader(
+        dataset=mnist, batch_size=self.batch_size, shuffle=True
+    )
+    cifar_loader = torch.utils.data.DataLoader(
+        dataset=cifar, batch_size=self.batch_size, shuffle=True
+    )
+    # each batch will be a list of tensors: [batch_mnist, batch_cifar]
+    return [mnist_loader, cifar_loader]
+
+# multiple dataloader, return as dict
+def train_dataloader(self):
+    mnist = MNIST(...)
+    cifar = CIFAR(...)
+    mnist_loader = torch.utils.data.DataLoader(
+        dataset=mnist, batch_size=self.batch_size, shuffle=True
+    )
+    cifar_loader = torch.utils.data.DataLoader(
+        dataset=cifar, batch_size=self.batch_size, shuffle=True
+    )
+    # each batch will be a dict of tensors: {'mnist': batch_mnist, 'cifar': batch_cifar}
+    return {'mnist': mnist_loader, 'cifar': cifar_loader}
+</code></pre></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def train_dataloader(self) -&gt; DataLoader:
+    return DataLoader(
+        self.op_train,
+        batch_size=self.batch_size,
+        shuffle=True,
+        num_workers=self.cfg.train.num_workers)</code></pre>
+</details>
+</dd>
+<dt id="openpack_torch.data.datamodule.OpenPackBaseDataModule.val_dataloader"><code class="name flex">
+<span>def <span class="ident">val_dataloader</span></span>(<span>self) ‑> List[torch.utils.data.dataloader.DataLoader]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Implement one or multiple PyTorch DataLoaders for validation.</p>
+<p>The dataloader you return will not be reloaded unless you set
+:paramref:<code>~pytorch_lightning.trainer.Trainer.reload_dataloaders_every_n_epochs</code> to
+a positive integer.</p>
+<p>It's recommended that all data downloads and preparation happen in :meth:<code>prepare_data</code>.</p>
+<ul>
+<li>:meth:<code>~pytorch_lightning.trainer.trainer.Trainer.fit</code></li>
+<li>:meth:<code>~pytorch_lightning.trainer.trainer.Trainer.validate</code></li>
+<li>:meth:<code>prepare_data</code></li>
+<li>:meth:<code>setup</code></li>
+</ul>
+<h2 id="note">Note</h2>
+<p>Lightning adds the correct sampler for distributed and arbitrary hardware
+There is no need to set it yourself.</p>
+<h2 id="return">Return</h2>
+<p>A :class:<code>torch.utils.data.DataLoader</code> or a sequence of them specifying validation samples.</p>
+<p>Examples::</p>
+<pre><code>def val_dataloader(self):
+    transform = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.5,), (1.0,))])
+    dataset = MNIST(root='/path/to/mnist/', train=False,
+                    transform=transform, download=True)
+    loader = torch.utils.data.DataLoader(
+        dataset=dataset,
+        batch_size=self.batch_size,
+        shuffle=False
+    )
+
+    return loader
+
+# can also return multiple dataloaders
+def val_dataloader(self):
+    return [loader_a, loader_b, ..., loader_n]
+</code></pre>
+<h2 id="note_1">Note</h2>
+<p>If you don't need a validation dataset and a :meth:<code>validation_step</code>, you don't need to
+implement this method.</p>
+<h2 id="note_2">Note</h2>
+<p>In the case where you return multiple validation dataloaders, the :meth:<code>validation_step</code>
+will have an argument <code>dataloader_idx</code> which matches the order here.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def val_dataloader(self) -&gt; List[DataLoader]:
+    dataloaders = []
+    for key, dataset in self.op_val.items():
+        dataloaders.append(
+            DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.cfg.train.num_workers)
+        )
+    return dataloaders</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="openpack_torch.data" href="index.html">openpack_torch.data</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule">OpenPackBaseDataModule</a></code></h4>
+<ul class="">
+<li><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule.dataset_class" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule.dataset_class">dataset_class</a></code></li>
+<li><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule.get_kwargs_for_datasets" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule.get_kwargs_for_datasets">get_kwargs_for_datasets</a></code></li>
+<li><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule.setup" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule.setup">setup</a></code></li>
+<li><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule.submission_dataloader" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule.submission_dataloader">submission_dataloader</a></code></li>
+<li><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule.test_dataloader" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule.test_dataloader">test_dataloader</a></code></li>
+<li><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule.train_dataloader" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule.train_dataloader">train_dataloader</a></code></li>
+<li><code><a title="openpack_torch.data.datamodule.OpenPackBaseDataModule.val_dataloader" href="#openpack_torch.data.datamodule.OpenPackBaseDataModule.val_dataloader">val_dataloader</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+</footer>
+</body>
+</html>
