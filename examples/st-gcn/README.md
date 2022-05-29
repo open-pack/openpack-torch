@@ -4,7 +4,7 @@
 
 ### [ST-GCN_Example_01.ipynb](./notebooks/ST-GCN_Example_01.ipynb)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch-dev/blob/main/examples/st-gcn/notebooks/ST-GCN_Example_01.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/st-gcn/notebooks/ST-GCN_Example_01.ipynb)
 
 In this notebook, you can train and test the ST-GCN with `openpack_torch` package.
 The basic ST-GCN model is designed for classification task, so we modified it for segmentation task by setting all strides = 1, and replacing the output layer.
