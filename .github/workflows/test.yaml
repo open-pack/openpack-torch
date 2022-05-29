@@ -1,0 +1,25 @@
+name: Test
+on:
+  push:
+    branches:
+      - main
+jobs:
+  ci:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+        python-version: [ 3.8, 3.9 ]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: atu4403/poetry-setup-multi-platform@v1
+      - name: Install Dependencis and Run Tests
+        run: |
+          poetry install
+          export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+          poetry run pytest --cov
+        shell: bash
