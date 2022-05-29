@@ -9,10 +9,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - macos-latest
-          - windows-latest
           - ubuntu-20.04
-          - ubuntu-latest
         python-version: [ 3.8, 3.9 ]
     steps:
       - uses: actions/checkout@v2
@@ -23,5 +20,6 @@ jobs:
       - name: Install Dependencis and Run Tests
         run: |
           poetry install
+          export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
           poetry run pytest --cov
         shell: bash
