@@ -27,7 +27,6 @@ poetry add  openpack-toolkit
 
 - Acceleration
   - [U-Net](./examples/unet/) (Coming soon...)
-  - [LOS-Net](./examples/unet/) (Coming soon...)
 
 #### Vision
 

@@ -1,3 +1,0 @@
-# LOS-Net
-
-TBA
