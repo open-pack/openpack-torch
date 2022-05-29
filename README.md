@@ -1,5 +1,8 @@
 # openpack-torch
 
+[![Test](https://github.com/open-pack/openpack-torch/actions/workflows/test.yaml/badge.svg)](https://github.com/open-pack/openpack-torch/actions/workflows/test.yaml)
+[![GitHub Pages](https://github.com/open-pack/openpack-torch/actions/workflows/deploy-docs.yaml/badge.svg)](https://github.com/open-pack/openpack-torch/actions/workflows/deploy-docs.yaml)
+
 PyTorch utilities to work around with OpenPack Dataset.
 
 ## Setup
@@ -17,7 +20,7 @@ poetry add  openpack-toolkit
 ## Docs
 
 - [Dataset Page](https://open-pack.github.io/)
-- API Docs (Comming soon...)
+- [API Docs](https://open-pack.github.io/openpack-torch/openpack_torch)
 
 ## Examples
 
