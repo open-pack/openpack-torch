@@ -6,10 +6,10 @@ authors = ["Yoshimura Naoya <yoshimura.naoya@ist.osaka-u.ac.jp>"]
 license = "MIT"
 readme = "README.md"
 homepage = "https://open-pack.github.io/home"
-repository = "https://github.com/open-pack/openpack-torch-dev"
+repository = "https://github.com/open-pack/openpack-torch"
 
 [tool.poetry.dependencies]
-python = "^3.7.11"
+python = "^3.7.11,<3.10"
 numpy = "<1.22.0"
 pandas = "^1.2.4"
 sklearn = ">=0.0"
@@ -19,10 +19,12 @@ hydra-core = "^1.2.0"
 pytorch-lightning = "^1.6.3"
 omegaconf = "^2.2.1"
 tqdm = "^4.64.0"
+openpack-toolkit = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
 pytest-cov = "^3.0.0"
+pdoc3 = "^0.10.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
