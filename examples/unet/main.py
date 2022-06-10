@@ -16,6 +16,7 @@ from openpack_toolkit.codalab.operation_segmentation import (
     make_submission_zipfile)
 
 logger = getLogger(__name__)
+optorch.configs.register_configs()
 
 # ----------------------------------------------------------------------
 
@@ -37,17 +38,17 @@ def save_training_results(log: Dict, logdir: Path) -> None:
     print(df)
 
 
-# # # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackImu
 
     def get_kwargs_for_datasets(self) -> Dict:
-        imu_cfg = self.cfg.dataset.modality.imu
+        imu_cfg = self.cfg.dataset.streams["atr-acc"]
         kwargs = {
             "imu_nodes": imu_cfg.nodes,
-            "use_acc": imu_cfg.use_acc,
-            "use_gyro": imu_cfg.use_gyro,
-            "use_quat": imu_cfg.use_quat,
+            "use_acc": imu_cfg.acc,
+            "use_gyro": imu_cfg.gyro,
+            "use_quat": imu_cfg.quat,
             "window": self.cfg.train.window,
             "debug": self.cfg.debug,
         }
@@ -57,20 +58,12 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
 class UNetLM(optorch.lightning.BaseLightningModule):
 
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
-        imu_cfg = self.cfg.dataset.modality.imu
-        num_nodes = len(imu_cfg.nodes)
-
-        in_ch = 0
-        if imu_cfg.use_acc:
-            in_ch += num_nodes * 3
-        if imu_cfg.use_gyro:
-            in_ch += num_nodes * 3
-        if imu_cfg.use_quat:
-            in_ch += num_nodes * 4
+        dstream_conf = self.cfg.dataset.streams["atr-acc"]
+        in_ch = len(dstream_conf.nodes) * 3
 
         model = optorch.models.imu.UNet(
             in_ch,
-            cfg.dataset.num_classes,
+            len(OPENPACK_OPERATIONS),
             depth=cfg.model.depth,
         )
         return model
@@ -170,7 +163,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     outputs = dict()
     for i, dataloader in enumerate(dataloaders):
         user, session = split[i]
-        logger.info(f"test on U{user:0=4}-S{session:0=4}")
+        logger.info(f"test on {user}-{session}")
 
         trainer.test(plmodel, dataloader)
 
@@ -185,7 +178,7 @@ def test(cfg: DictConfig, mode: str = "test"):
             np.save(path, arr)
             logger.info(f"save {key}[shape={arr.shape}] to {path}")
 
-        key = f"U{user:0=4}-S{session:0=4}"
+        key = f"{user}-{session}"
         outputs[key] = {
             "y": plmodel.test_results.get("y"),
             "unixtime": plmodel.test_results.get("unixtime"),
@@ -210,9 +203,16 @@ def test(cfg: DictConfig, mode: str = "test"):
         make_submission_zipfile(submission_dict, logdir)
 
 
-@ hydra.main(version_base=None, config_path="../../configs",
-             config_name="operation-segmentation-unet.yaml")
+# @ hydra.main(version_base=None, config_path="../../configs",
+#              config_name="operation-segmentation-unet.yaml")
+@ hydra.main(version_base=None, config_path="./configs",
+             config_name="operation-segmentation.yaml")
 def main(cfg: DictConfig):
+    # DEBUG
+    cfg.dataset.annot.classes = OPENPACK_OPERATIONS
+    if cfg.debug:
+        cfg.dataset.split = optk.configs.datasets.splits.DEBUG_SPLIT
+
     print("===== Params =====")
     print(OmegaConf.to_yaml(cfg))
     print("==================")
