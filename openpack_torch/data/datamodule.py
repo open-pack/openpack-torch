@@ -82,14 +82,14 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
             Dict[str, torch.utils.data.Dataset]: dataset objects
         """
         datasets = dict()
-        for user_id, session_id in user_session:
-            key = f"U{user_id:0=4}-S{session_id:0=4}"
+        for user, session in user_session:
+            key = f"{user}-{session}"
             datasets[key] = self.dataset_class(
-                rootdir, [(user_id, session_id)], **kwargs)
+                rootdir, [(user, session)], **kwargs)
         return datasets
 
     def setup(self, stage: Optional[str] = None) -> None:
-        rootdir = Path(self.cfg.dataset.volume.rootdir)
+        rootdir = Path(self.cfg.volume.dataset.rootdir)
         split = self.cfg.dataset.split
         kwargs = self.get_kwargs_for_datasets()
 
