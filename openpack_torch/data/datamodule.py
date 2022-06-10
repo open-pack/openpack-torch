@@ -89,7 +89,7 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         return datasets
 
     def setup(self, stage: Optional[str] = None) -> None:
-        rootdir = Path(self.cfg.volume.dataset.rootdir)
+        rootdir = Path(self.cfg.path.datasets.openpack)
         split = self.cfg.dataset.split
         kwargs = self.get_kwargs_for_datasets()
 

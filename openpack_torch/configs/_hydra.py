@@ -17,9 +17,9 @@ def register_configs() -> None:
             optk.configs.users.U0107,
         ],
         "dataset/stream": [
-            optk.configs.datasets.streams.OPENPACK_ATR_ACC_STREAM,
-            optk.configs.datasets.streams.OPENPACK_ATR_QAGS_STREAM,
-            optk.configs.datasets.streams.OPENPACK_KINECT_2D_KPT_STREAM,
+            optk.configs.datasets.streams.ATR_ACC_STREAM,
+            optk.configs.datasets.streams.ATR_QAGS_STREAM,
+            optk.configs.datasets.streams.KINECT_2D_KPT_STREAM,
         ],
         "dataset/split": [
             optk.configs.datasets.splits.DEBUG_SPLIT,
