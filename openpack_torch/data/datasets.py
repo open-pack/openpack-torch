@@ -269,10 +269,10 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
         for seq_idx, (user, session) in enumerate(user_session):
             path_skeleton = Path(
                 rootdir,
-                f"U{user:0=4}",
+                user,
                 "pose/",
                 keypoint_type,
-                f"S{session:0=4}.json",
+                f"{session}.json",
             )
             ts_sess, x_sess = optk.data.load_keypoints(path_skeleton)
             x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
@@ -283,9 +283,9 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
             else:
                 path_annot = Path(
                     rootdir,
-                    f"U{user:0=4}",
+                    user,
                     "annotation/work-process",
-                    f"S{session:0=4}.csv",
+                    f"{session}.csv",
                 )
                 df_label = optk.data.load_annotation(
                     path_annot, ts_sess, classes=self.classes)

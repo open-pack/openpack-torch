@@ -16,6 +16,7 @@ from openpack_toolkit.codalab.operation_segmentation import (
     make_submission_zipfile)
 
 logger = getLogger(__name__)
+optorch.configs.register_configs()
 
 # ----------------------------------------------------------------------
 
@@ -42,11 +43,11 @@ class OpenPackKeypointDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackKeypoint
 
     def get_kwargs_for_datasets(self) -> Dict:
-        kpt_cfg = self.cfg.dataset.modality.keypoint
+        kpt_cfg = self.cfg.dataset.streams["kinect-2d-kpt"]
         submission = True if self.cfg.mode == "submission" else False
 
         kwargs = {
-            "keypoint_type": kpt_cfg.type,
+            "keypoint_type": kpt_cfg.model,
             "debug": self.cfg.debug,
             "window": self.cfg.train.window,
             "submission": submission,
@@ -57,19 +58,13 @@ class OpenPackKeypointDataModule(optorch.data.OpenPackBaseDataModule):
 class STGCN4SegLM(optorch.lightning.BaseLightningModule):
 
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
-        if cfg.dataset.modality.keypoint.format == "2D":
-            in_ch = 2
-        elif cfg.dataset.modality.keypoint.format == "3D":
-            in_ch = 3
-        else:
-            raise ValueError()
-
+        in_ch = 2
         Ks = cfg.model.Ks
         A = optorch.models.keypoint.get_adjacency_matrix(
             layout="MSCOCO", hop_size=Ks - 1)
         model = optorch.models.keypoint.STGCN4Seg(
             in_ch,
-            cfg.dataset.num_classes,
+            len(OPENPACK_OPERATIONS),
             Ks=cfg.model.Ks,
             Kt=cfg.model.Kt,
             A=A,
@@ -101,7 +96,7 @@ class STGCN4SegLM(optorch.lightning.BaseLightningModule):
 
 def train(cfg: DictConfig):
     device = torch.device("cuda")
-    logdir = Path.cwd()
+    logdir = Path(cfg.path.logdir.rootdir)
     logger.debug(f"logdir = {logdir}")
     optk.utils.io.cleanup_dir(logdir, exclude="hydra")
 
@@ -143,7 +138,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     logger.debug(f"test() function is called with mode={mode}.")
 
     device = torch.device("cuda")
-    logdir = Path(cfg.volume.logdir.rootdir)
+    logdir = Path(cfg.path.logdir.rootdir)
 
     datamodule = OpenPackKeypointDataModule(cfg)
     datamodule.setup(mode)
@@ -170,13 +165,13 @@ def test(cfg: DictConfig, mode: str = "test"):
     outputs = dict()
     for i, dataloader in enumerate(dataloaders):
         user, session = split[i]
-        logger.info(f"test on U{user:0=4}-S{session:0=4}")
+        logger.info(f"test on {user}-{session}")
 
         trainer.test(plmodel, dataloader)
 
         # save model outputs
         pred_dir = Path(
-            cfg.volume.logdir.predict.format(user=user, session=session)
+            cfg.path.logdir.predict.format(user=user, session=session)
         )
         pred_dir.mkdir(parents=True, exist_ok=True)
 
@@ -185,7 +180,7 @@ def test(cfg: DictConfig, mode: str = "test"):
             np.save(path, arr)
             logger.info(f"save {key}[shape={arr.shape}] to {path}")
 
-        key = f"U{user:0=4}-S{session:0=4}"
+        key = f"{user}-{session}"
         outputs[key] = {
             "y": plmodel.test_results.get("y"),
             "unixtime": plmodel.test_results.get("unixtime"),
@@ -200,7 +195,7 @@ def test(cfg: DictConfig, mode: str = "test"):
         df_summary = eval_operation_segmentation_wrapper(
             outputs, OPENPACK_OPERATIONS,
         )
-        path = Path(cfg.volume.logdir.summary)
+        path = Path(cfg.path.logdir.summary)
         df_summary.to_csv(path, index=False)
         logger.info(f"df_summary:\n{df_summary}")
     elif mode == "submission":
@@ -210,9 +205,14 @@ def test(cfg: DictConfig, mode: str = "test"):
         make_submission_zipfile(submission_dict, logdir)
 
 
-@ hydra.main(version_base=None, config_path="../../configs",
-             config_name="operation-segmentation-stgcn.yaml")
+@ hydra.main(version_base=None, config_path="./configs",
+             config_name="operation-segmentation.yaml")
 def main(cfg: DictConfig):
+    # DEBUG
+    cfg.dataset.annot.classes = OPENPACK_OPERATIONS
+    if cfg.debug:
+        cfg.dataset.split = optk.configs.datasets.splits.DEBUG_SPLIT
+
     print("===== Params =====")
     print(OmegaConf.to_yaml(cfg))
     print("==================")
