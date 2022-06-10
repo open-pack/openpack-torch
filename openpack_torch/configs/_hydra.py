@@ -1,6 +1,9 @@
 import openpack_toolkit as optk
 from hydra.core.config_store import ConfigStore
 
+from .datasets import (OPENPACK_2D_KEYPOINT_DATASET_CONFIG,
+                       OPENPACK_ACC_DATASET_CONFIG)
+
 
 def register_configs() -> None:
     cs = ConfigStore.instance()
@@ -25,6 +28,9 @@ def register_configs() -> None:
         "dataset/annotation": [
             optk.configs.datasets.annotations.OPENPACK_ACTIONS_ANNOTATION,
             optk.configs.datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+        ],
+        "dataset": [
+            OPENPACK_ACC_DATASET_CONFIG, OPENPACK_2D_KEYPOINT_DATASET_CONFIG
         ],
     }
     for group, items in data.items():
