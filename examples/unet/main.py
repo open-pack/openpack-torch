@@ -135,7 +135,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     logger.debug(f"test() function is called with mode={mode}.")
 
     device = torch.device("cuda")
-    logdir = Path(cfg.volume.logdir.rootdir)
+    logdir = Path(cfg.path.logdir.rootdir)
 
     datamodule = OpenPackImuDataModule(cfg)
     datamodule.setup(mode)
@@ -169,7 +169,7 @@ def test(cfg: DictConfig, mode: str = "test"):
 
         # save model outputs
         pred_dir = Path(
-            cfg.volume.logdir.predict.format(user=user, session=session)
+            cfg.path.logdir.predict.format(user=user, session=session)
         )
         pred_dir.mkdir(parents=True, exist_ok=True)
 
@@ -193,7 +193,7 @@ def test(cfg: DictConfig, mode: str = "test"):
         df_summary = eval_operation_segmentation_wrapper(
             outputs, OPENPACK_OPERATIONS,
         )
-        path = Path(cfg.volume.logdir.summary)
+        path = Path(cfg.path.logdir.summary)
         df_summary.to_csv(path, index=False)
         logger.info(f"df_summary:\n{df_summary}")
     elif mode == "submission":
@@ -203,8 +203,6 @@ def test(cfg: DictConfig, mode: str = "test"):
         make_submission_zipfile(submission_dict, logdir)
 
 
-# @ hydra.main(version_base=None, config_path="../../configs",
-#              config_name="operation-segmentation-unet.yaml")
 @ hydra.main(version_base=None, config_path="./configs",
              config_name="operation-segmentation.yaml")
 def main(cfg: DictConfig):

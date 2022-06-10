@@ -6,7 +6,7 @@ datarootdir: /home/bob/data
 issue: "I01-EXP1-V1"
 hydra:
   run:
-    dir: ${volume.logdir.rootdir}
+    dir: ${path.logdir.rootdir}
   job:
     chdir: true
 debug: true
@@ -32,11 +32,12 @@ train:
   debug:
     batch_size: 8
     epochs: 5
-volume:
-  dataset:
-    rootdir: ${datarootdir}/datasets/openpack
+path:
+  datasets:
+    rootdir: ${datarootdir}/datasets
+    openpack: ${datarootdir}/datasets/openpack
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
-    model: ${volume.logdir.rootdir}/model.pth
-    predict: ${volume.logdir.rootdir}/pred/{user}-{session}
-    summary: ${volume.logdir.rootdir}/summary.csv
+    model: ${path.logdir.rootdir}/model.pth
+    predict: ${path.logdir.rootdir}/pred/{user}-{session}
+    summary: ${path.logdir.rootdir}/summary.csv
