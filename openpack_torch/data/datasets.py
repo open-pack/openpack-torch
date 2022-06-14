@@ -107,7 +107,7 @@ class OpenPackImu(torch.utils.data.Dataset):
         data, index = [], []
         for seq_idx, (user, session) in enumerate(user_session):
             paths_imu = tuple([Path(
-                rootdir, user, node, f"{session}.csv",
+                rootdir, user, "atr", node, f"{session}.csv",
             ) for node in imu_nodes])
             ts_sess, x_sess = optk.data.load_imu(
                 paths_imu, use_acc=use_acc, use_gyro=use_gyro, use_quat=use_quat)
@@ -119,7 +119,7 @@ class OpenPackImu(torch.utils.data.Dataset):
                 path_annot = Path(
                     rootdir,
                     user,
-                    "annotation/work-process",
+                    "annotation/openpack-operations",
                     f"{session}.csv",
                 )
                 df_label = optk.data.load_annotation(
