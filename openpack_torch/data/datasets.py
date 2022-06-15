@@ -270,8 +270,9 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
             path_skeleton = Path(
                 rootdir,
                 user,
-                "pose/",
+                "kinect/2d-kpt",  # FIXME: replace this hard-coded value
                 keypoint_type,
+                "single",  # FIXME: parametrize
                 f"{session}.json",
             )
             ts_sess, x_sess = optk.data.load_keypoints(path_skeleton)
@@ -284,7 +285,7 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
                 path_annot = Path(
                     rootdir,
                     user,
-                    "annotation/work-process",
+                    "annotation/openpack-operations",
                     f"{session}.csv",
                 )
                 df_label = optk.data.load_annotation(
