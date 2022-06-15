@@ -35,7 +35,7 @@ train:
 path:
   datasets:
     rootdir: ${datarootdir}/datasets
-    openpack: ${datarootdir}/datasets/openpack
+    openpack: ${datarootdir}/datasets/openpack/v0.2.1
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth

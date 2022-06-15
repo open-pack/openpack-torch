@@ -17,7 +17,7 @@ model:
   Kt: 9
 train:
   num_workers: 3
-  batch_size: 32
+  batch_size: 8
   epochs: 200
   window: 900 # 30Hz * 60s
   optimizer:
@@ -30,7 +30,7 @@ train:
 path:
   datasets:
     rootdir: ${datarootdir}/datasets
-    openpack: ${datarootdir}/datasets/openpack
+    openpack: ${datarootdir}/datasets/openpack/v0.2.1
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth
