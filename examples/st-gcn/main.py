@@ -134,7 +134,7 @@ def train(cfg: DictConfig):
 
 
 def test(cfg: DictConfig, mode: str = "test"):
-    assert mode in ("test", "submission")
+    assert mode in ("test", "submission", "test-on-submission")
     logger.debug(f"test() function is called with mode={mode}.")
 
     device = torch.device("cuda")
@@ -159,7 +159,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     if mode == "test":
         dataloaders = datamodule.test_dataloader()
         split = cfg.dataset.split.test
-    elif mode == "submission":
+    elif mode in ("submission", "test-on-submission"):
         dataloaders = datamodule.submission_dataloader()
         split = cfg.dataset.split.submission
     outputs = dict()
@@ -185,17 +185,24 @@ def test(cfg: DictConfig, mode: str = "test"):
             "y": plmodel.test_results.get("y"),
             "unixtime": plmodel.test_results.get("unixtime"),
         }
-        if mode == "test":
+        if mode in ("test", "test-on-submission"):
             outputs[key].update({
                 "t_idx": plmodel.test_results.get("t"),
             })
 
-    if mode == "test":
+    if mode in ("test", "test-on-submission"):
         # save performance summary
         df_summary = eval_operation_segmentation_wrapper(
             outputs, OPENPACK_OPERATIONS,
         )
-        path = Path(cfg.path.logdir.summary)
+        if mode == "test":
+            path = Path(cfg.path.logdir.summary.test)
+        elif mode == "test-on-submission":
+            path = Path(cfg.path.logdir.summary.submission)
+
+        # NOTE: change pandas option to show tha all rows/cols.
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.max_columns', None)
         df_summary.to_csv(path, index=False)
         logger.info(f"df_summary:\n{df_summary}")
     elif mode == "submission":
@@ -212,6 +219,7 @@ def main(cfg: DictConfig):
     cfg.dataset.annot.classes = OPENPACK_OPERATIONS
     if cfg.debug:
         cfg.dataset.split = optk.configs.datasets.splits.DEBUG_SPLIT
+        cfg.path.logdir.rootdir += "/debug"
 
     print("===== Params =====")
     print(OmegaConf.to_yaml(cfg))
@@ -219,7 +227,7 @@ def main(cfg: DictConfig):
 
     if cfg.mode == "train":
         train(cfg)
-    elif cfg.mode in ("test", "submission"):
+    elif cfg.mode in ("test", "submission", "test-on-submission"):
         test(cfg, mode=cfg.mode)
     else:
         raise ValueError(f"unknown mode [cfg.mode={cfg.mode}]")

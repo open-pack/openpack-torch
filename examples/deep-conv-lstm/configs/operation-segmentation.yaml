@@ -1,7 +1,7 @@
 defaults:
-  - dataset: openpack-2d-kpt
-  - override hydra/job_logging: custom
+  - dataset: openpack-acc
   - _self_
+  - override hydra/job_logging: custom
 datarootdir: /home/bob/data
 issue: "I01-EXP1-V1"
 hydra:
@@ -11,15 +11,17 @@ hydra:
     chdir: true
 debug: true
 mode: "test"
-model:
-  name: "STGCN4Seg"
-  Ks: 3
-  Kt: 9
+dataset:
+  streams:
+    atr-acc:
+      nodes:
+        - "atr01"
+        - "atr02"
 train:
   num_workers: 3
-  batch_size: 8
+  batch_size: 32
   epochs: 200
-  window: 900 # 30Hz * 60s
+  window: 1800 # 30Hz * 60s
   optimizer:
     type: "Adam"
     lr: 0.001
@@ -36,6 +38,6 @@ path:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth
     predict: ${path.logdir.rootdir}/pred/{user}-{session}
-    summary:
+    summary: 
       test: ${path.logdir.rootdir}/summary.csv
       submission: ${path.logdir.rootdir}/summary_submission.csv

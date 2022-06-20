@@ -35,9 +35,12 @@ train:
 path:
   datasets:
     rootdir: ${datarootdir}/datasets
-    openpack: ${datarootdir}/datasets/openpack/v0.2.1
+    version: v0.2.1
+    openpack: ${datarootdir}/datasets/openpack/${path.datasets.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth
     predict: ${path.logdir.rootdir}/pred/{user}-{session}
-    summary: ${path.logdir.rootdir}/summary.csv
+    summary: 
+      test: ${path.logdir.rootdir}/summary.csv
+      submission: ${path.logdir.rootdir}/summary_submission.csv

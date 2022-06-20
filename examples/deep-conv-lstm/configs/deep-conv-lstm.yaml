@@ -1,0 +1,18 @@
+defaults:
+  - _self_
+  - operation-segmentation
+issue: "I01-EXP1-V1"
+model:
+  name: DeepConvLSTM
+train:
+  num_workers: 3
+  batch_size: 32
+  epochs: 200
+  window: 1800 # 30Hz * 60s
+  optimizer:
+    type: "Adam"
+    lr: 0.001
+    weight_decay: 0.0001
+  debug:
+    batch_size: 8
+    epochs: 5

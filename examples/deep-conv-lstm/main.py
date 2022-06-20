@@ -55,16 +55,15 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
         return kwargs
 
 
-class UNetLM(optorch.lightning.BaseLightningModule):
+class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
 
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
         dstream_conf = self.cfg.dataset.streams["atr-acc"]
         in_ch = len(dstream_conf.nodes) * 3
 
-        model = optorch.models.imu.UNet(
+        model = optorch.models.imu.DeepConvLSTM(
             in_ch,
             len(OPENPACK_OPERATIONS),
-            depth=cfg.model.depth,
         )
         return model
 
@@ -98,7 +97,7 @@ def train(cfg: DictConfig):
     optk.utils.io.cleanup_dir(logdir, exclude="hydra")
 
     datamodule = OpenPackImuDataModule(cfg)
-    plmodel = UNetLM(cfg)
+    plmodel = DeepConvLSTMLM(cfg)
     plmodel.to(dtype=torch.float, device=device)
     logger.info(plmodel)
 
@@ -142,7 +141,7 @@ def test(cfg: DictConfig, mode: str = "test"):
 
     ckpt_path = Path(logdir, "checkpoints", "last.ckpt")
     logger.info(f"load checkpoint from {ckpt_path}")
-    plmodel = UNetLM.load_from_checkpoint(ckpt_path, cfg=cfg)
+    plmodel = DeepConvLSTMLM.load_from_checkpoint(ckpt_path, cfg=cfg)
     plmodel.to(dtype=torch.float, device=device)
 
     # num_epoch = cfg.train.debug.epochs if cfg.debug else cfg.train.epochs
@@ -211,7 +210,7 @@ def test(cfg: DictConfig, mode: str = "test"):
 
 
 @ hydra.main(version_base=None, config_path="./configs",
-             config_name="operation-segmentation.yaml")
+             config_name="deep-conv-lstm.yaml")
 def main(cfg: DictConfig):
     # DEBUG
     cfg.dataset.annot.classes = OPENPACK_OPERATIONS

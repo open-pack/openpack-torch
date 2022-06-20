@@ -109,6 +109,10 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
             self.op_test = None
 
         if stage in (None, "submission"):
+            kwargs.update({"submission": True})
+            self.op_submission = self._init_datasets(
+                rootdir, split.submission, kwargs)
+        elif stage == "test-on-submission":
             self.op_submission = self._init_datasets(
                 rootdir, split.submission, kwargs)
         else:
