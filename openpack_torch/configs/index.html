@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.10.0" />
-<title>openpack_torch API documentation</title>
+<title>openpack_torch.configs API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
@@ -19,35 +19,24 @@
 <main>
 <article id="content">
 <header>
-<h1 class="title">Package <code>openpack_torch</code></h1>
+<h1 class="title">Module <code>openpack_torch.configs</code></h1>
 </header>
 <section id="section-intro">
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">__version__ = &#39;0.2.0&#39;
-from . import configs, data, lightning, models
+<pre><code class="python">from ._hydra import register_configs
 
-__all__ = [&#34;configs&#34;, &#34;data&#34;, &#34;lightning&#34;, &#34;models&#34;]</code></pre>
+__all__ = [
+    &#34;register_configs&#34;,
+]</code></pre>
 </details>
 </section>
 <section>
 <h2 class="section-title" id="header-submodules">Sub-modules</h2>
 <dl>
-<dt><code class="name"><a title="openpack_torch.configs" href="configs/index.html">openpack_torch.configs</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt><code class="name"><a title="openpack_torch.data" href="data/index.html">openpack_torch.data</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt><code class="name"><a title="openpack_torch.lightning" href="lightning.html">openpack_torch.lightning</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt><code class="name"><a title="openpack_torch.models" href="models/index.html">openpack_torch.models</a></code></dt>
+<dt><code class="name"><a title="openpack_torch.configs.datasets" href="datasets.html">openpack_torch.configs.datasets</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -56,6 +45,51 @@ __all__ = [&#34;configs&#34;, &#34;data&#34;, &#34;lightning&#34;, &#34;models&#
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="openpack_torch.configs.register_configs"><code class="name flex">
+<span>def <span class="ident">register_configs</span></span>(<span>) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def register_configs() -&gt; None:
+    cs = ConfigStore.instance()
+
+    data = {
+        &#34;user&#34;: [
+            optk.configs.users.U0102,
+            optk.configs.users.U0103,
+            optk.configs.users.U0105,
+            optk.configs.users.U0106,
+            optk.configs.users.U0107,
+        ],
+        &#34;dataset/stream&#34;: [
+            optk.configs.datasets.streams.ATR_ACC_STREAM,
+            optk.configs.datasets.streams.ATR_QAGS_STREAM,
+            optk.configs.datasets.streams.KINECT_2D_KPT_STREAM,
+        ],
+        &#34;dataset/split&#34;: [
+            optk.configs.datasets.splits.DEBUG_SPLIT,
+            optk.configs.datasets.splits.PILOT_CHALLENGE_SPLIT,
+        ],
+        &#34;dataset/annotation&#34;: [
+            optk.configs.datasets.annotations.OPENPACK_ACTIONS_ANNOTATION,
+            optk.configs.datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+        ],
+        &#34;dataset&#34;: [
+            OPENPACK_ACC_DATASET_CONFIG, OPENPACK_2D_KEYPOINT_DATASET_CONFIG
+        ],
+    }
+    for group, items in data.items():
+        for item in items:
+            cs.store(group=group, name=item.name, node=item)</code></pre>
+</details>
+</dd>
+</dl>
 </section>
 <section>
 </section>
@@ -66,12 +100,19 @@ __all__ = [&#34;configs&#34;, &#34;data&#34;, &#34;lightning&#34;, &#34;models&#
 <ul></ul>
 </div>
 <ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="openpack_torch" href="../index.html">openpack_torch</a></code></li>
+</ul>
+</li>
 <li><h3><a href="#header-submodules">Sub-modules</a></h3>
 <ul>
-<li><code><a title="openpack_torch.configs" href="configs/index.html">openpack_torch.configs</a></code></li>
-<li><code><a title="openpack_torch.data" href="data/index.html">openpack_torch.data</a></code></li>
-<li><code><a title="openpack_torch.lightning" href="lightning.html">openpack_torch.lightning</a></code></li>
-<li><code><a title="openpack_torch.models" href="models/index.html">openpack_torch.models</a></code></li>
+<li><code><a title="openpack_torch.configs.datasets" href="datasets.html">openpack_torch.configs.datasets</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="openpack_torch.configs.register_configs" href="#openpack_torch.configs.register_configs">register_configs</a></code></li>
 </ul>
 </li>
 </ul>

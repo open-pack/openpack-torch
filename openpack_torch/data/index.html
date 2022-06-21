@@ -146,14 +146,14 @@ be included in this object.</dd>
             Dict[str, torch.utils.data.Dataset]: dataset objects
         &#34;&#34;&#34;
         datasets = dict()
-        for user_id, session_id in user_session:
-            key = f&#34;U{user_id:0=4}-S{session_id:0=4}&#34;
+        for user, session in user_session:
+            key = f&#34;{user}-{session}&#34;
             datasets[key] = self.dataset_class(
-                rootdir, [(user_id, session_id)], **kwargs)
+                rootdir, [(user, session)], **kwargs)
         return datasets
 
     def setup(self, stage: Optional[str] = None) -&gt; None:
-        rootdir = Path(self.cfg.dataset.volume.rootdir)
+        rootdir = Path(self.cfg.path.datasets.openpack)
         split = self.cfg.dataset.split
         kwargs = self.get_kwargs_for_datasets()
 
@@ -173,6 +173,10 @@ be included in this object.</dd>
             self.op_test = None
 
         if stage in (None, &#34;submission&#34;):
+            kwargs.update({&#34;submission&#34;: True})
+            self.op_submission = self._init_datasets(
+                rootdir, split.submission, kwargs)
+        elif stage == &#34;test-on-submission&#34;:
             self.op_submission = self._init_datasets(
                 rootdir, split.submission, kwargs)
         else:
@@ -323,7 +327,7 @@ when using DDP.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def setup(self, stage: Optional[str] = None) -&gt; None:
-    rootdir = Path(self.cfg.dataset.volume.rootdir)
+    rootdir = Path(self.cfg.path.datasets.openpack)
     split = self.cfg.dataset.split
     kwargs = self.get_kwargs_for_datasets()
 
@@ -343,6 +347,10 @@ when using DDP.</p>
         self.op_test = None
 
     if stage in (None, &#34;submission&#34;):
+        kwargs.update({&#34;submission&#34;: True})
+        self.op_submission = self._init_datasets(
+            rootdir, split.submission, kwargs)
+    elif stage == &#34;test-on-submission&#34;:
         self.op_submission = self._init_datasets(
             rootdir, split.submission, kwargs)
     else:
