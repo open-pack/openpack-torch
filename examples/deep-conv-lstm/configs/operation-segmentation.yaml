@@ -14,7 +14,7 @@ mode: "test"
 dataset:
   streams:
     atr-acc:
-      nodes:
+      devices:
         - "atr01"
         - "atr02"
 train:
@@ -32,7 +32,7 @@ train:
 path:
   datasets:
     rootdir: ${datarootdir}/datasets
-    version: v0.2.1
+    version: v0.2.0
     openpack: ${datarootdir}/datasets/openpack/${path.datasets.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}

@@ -45,7 +45,7 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
     def get_kwargs_for_datasets(self) -> Dict:
         imu_cfg = self.cfg.dataset.streams["atr-acc"]
         kwargs = {
-            "imu_nodes": imu_cfg.nodes,
+            "imu_nodes": imu_cfg.devices,
             "use_acc": imu_cfg.acc,
             "use_gyro": imu_cfg.gyro,
             "use_quat": imu_cfg.quat,
@@ -61,7 +61,7 @@ class DeepConvLSTMSelfAttnLM(optorch.lightning.BaseLightningModule):
         dstream_conf = self.cfg.dataset.streams["atr-acc"]
         model_conf = self.cfg.model
 
-        in_ch = len(dstream_conf.nodes) * 3
+        in_ch = len(dstream_conf.devices) * 3
 
         model = optorch.models.imu.DeepConvLSTMSelfAttn(
             in_ch,

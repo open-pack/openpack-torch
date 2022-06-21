@@ -47,7 +47,7 @@ class OpenPackKeypointDataModule(optorch.data.OpenPackBaseDataModule):
         submission = True if self.cfg.mode == "submission" else False
 
         kwargs = {
-            "keypoint_type": kpt_cfg.model,
+            "keypoint_type": f"{kpt_cfg.model}/single",
             "debug": self.cfg.debug,
             "window": self.cfg.train.window,
             "submission": submission,
