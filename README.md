@@ -21,6 +21,7 @@ poetry add  openpack-torch
 
 - [Dataset Page](https://open-pack.github.io/)
 - [API Docs](https://open-pack.github.io/openpack-torch/openpack_torch)
+- [PyPI - openpack-torch](https://pypi.org/project/openpack-torch/)
 
 ## Examples
 
