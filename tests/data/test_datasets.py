@@ -7,8 +7,8 @@ from openpack_torch.data.datasets import OpenPackImu, OpenPackKeypoint
 
 # -----------------------------------------------------------------------------
 def test_OpenPackImu_01():
-    rootdir = Path(__file__).parents[1] / "sample-data/openpack/"
-    user_session = ((0, 100), )
+    rootdir = Path(__file__).parents[2] / "samples/openpack/vX.X.X"
+    user_session = (("U0102", "S0500"), )
     imu_nodes = ("atr01",)
 
     dataset = OpenPackImu(rootdir, user_session, imu_nodes=imu_nodes)
@@ -25,8 +25,8 @@ def test_OpenPackImu_01():
 
 def test_OpenPackImu_02():
     """ submission = True """
-    rootdir = Path(__file__).parents[1] / "sample-data/openpack/"
-    user_session = ((0, 100), )
+    rootdir = Path(__file__).parents[2] / "samples/openpack/vX.X.X"
+    user_session = (("U0102", "S0500"), )
     imu_nodes = ("atr01", "atr01")
 
     dataset = OpenPackImu(
@@ -52,9 +52,11 @@ def test_OpenPackImu_02():
 
 
 def test_OpenPackKeypoint_01():
-    rootdir = Path(__file__).parents[1] / "sample-data/openpack/"
-    user_session = ((0, 100), )
-    keypoint_type = "mmpose-hrnet-mmdet/cleaned"
+    rootdir = Path(__file__).parents[2] / "samples/openpack/vX.X.X"
+    user_session = (("U0102", "S0500"), )
+    # rootdir = Path(__file__).parents[1] / "sample-data/openpack/"
+    # user_session = ((0, 100), )
+    keypoint_type = "mmpose-hrnet-w48-posetrack18-384x288-posewarper-stage2/single"
 
     dataset = OpenPackKeypoint(
         rootdir,

@@ -3,7 +3,7 @@
 [![Test](https://github.com/open-pack/openpack-torch/actions/workflows/test.yaml/badge.svg)](https://github.com/open-pack/openpack-torch/actions/workflows/test.yaml)
 [![GitHub Pages](https://github.com/open-pack/openpack-torch/actions/workflows/deploy-docs.yaml/badge.svg)](https://github.com/open-pack/openpack-torch/actions/workflows/deploy-docs.yaml)
 
-PyTorch utilities to work around with OpenPack Dataset.
+PyTorch utilities to work around with [OpenPack Dataset](https://open-pack.github.io/).
 
 ## Setup
 
@@ -24,18 +24,20 @@ poetry add  openpack-torch
 
 ## Examples
 
-### Work Step Recognition (Segmentation)
+### Operation Recognition (Semantic Segmentation)
 
 #### IMU
 
 - Acceleration
-  - [U-Net](./examples/unet/) (Coming soon...)
+  - [U-Net](./examples/unet/)
+  - [DeepConvLSTM](./examples/deep-conv-lstm/)
 
 #### Vision
 
 - Keypoints
-  - [ST-GCN](./examples/st-gcn)  (Coming soon...)
+  - [ST-GCN](./examples/st-gcn)
 
 ## LICENCE
 
-[MIT Licence](./LICENSE)
+This software (openpack-torch) is distributed under [MIT Licence](./LICENSE).
+For the license of "OpenPack Dataset", please check [this site (https://open-pack.github.io/)](https://open-pack.github.io/).

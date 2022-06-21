@@ -84,7 +84,7 @@ class OpenPackImu(torch.utils.data.Dataset):
     def load_dataset(
         self,
         rootdir: Path,
-        user_session: Tuple[Tuple[int, int], ...],
+        user_session: Tuple[Tuple[str, str], ...],
         imu_nodes: Tuple[str, ...],
         window: int = None,
         use_acc: bool = True,
@@ -96,7 +96,7 @@ class OpenPackImu(torch.utils.data.Dataset):
 
         Args:
             rootdir (Path): _description_
-            user_session (Tuple[Tuple[int, int], ...]): _description_
+            user_session (Tuple[Tuple[str, str], ...]): _description_
             imu_nodes (Tuple[str, ...]): _description_
             window (int, optional): _description_. Defaults to None.
             use_acc (bool, optional): _description_. Defaults to True.
@@ -122,7 +122,7 @@ class OpenPackImu(torch.utils.data.Dataset):
                     "annotation/openpack-operations",
                     f"{session}.csv",
                 )
-                df_label = optk.data.load_annotation(
+                df_label = optk.data.load_and_resample_operation_labels(
                     path_annot, ts_sess, classes=self.classes)
                 label = df_label["act_idx"].values
 
@@ -272,7 +272,6 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
                 user,
                 "kinect/2d-kpt",  # FIXME: replace this hard-coded value
                 keypoint_type,
-                "single",  # FIXME: parametrize
                 f"{session}.json",
             )
             ts_sess, x_sess = optk.data.load_keypoints(path_skeleton)
@@ -288,7 +287,7 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
                     "annotation/openpack-operations",
                     f"{session}.csv",
                 )
-                df_label = optk.data.load_annotation(
+                df_label = optk.data.load_and_resample_operation_labels(
                     path_annot, ts_sess, classes=self.classes)
                 label = df_label["act_idx"].values
 
