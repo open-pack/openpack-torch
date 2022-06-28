@@ -43,11 +43,9 @@ class OpenPackKeypointDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackKeypoint
 
     def get_kwargs_for_datasets(self) -> Dict:
-        kpt_cfg = self.cfg.dataset.streams["kinect-2d-kpt"]
         submission = True if self.cfg.mode == "submission" else False
 
         kwargs = {
-            "keypoint_type": f"{kpt_cfg.model}/single",
             "debug": self.cfg.debug,
             "window": self.cfg.train.window,
             "submission": submission,
@@ -203,6 +201,7 @@ def test(cfg: DictConfig, mode: str = "test"):
         # NOTE: change pandas option to show tha all rows/cols.
         pd.set_option('display.max_rows', None)
         pd.set_option('display.max_columns', None)
+        pd.set_option("display.width", 200)
         df_summary.to_csv(path, index=False)
         logger.info(f"df_summary:\n{df_summary}")
     elif mode == "submission":
@@ -216,7 +215,6 @@ def test(cfg: DictConfig, mode: str = "test"):
              config_name="operation-segmentation.yaml")
 def main(cfg: DictConfig):
     # DEBUG
-    cfg.dataset.annot.classes = OPENPACK_OPERATIONS
     if cfg.debug:
         cfg.dataset.split = optk.configs.datasets.splits.DEBUG_SPLIT
         cfg.path.logdir.rootdir += "/debug"

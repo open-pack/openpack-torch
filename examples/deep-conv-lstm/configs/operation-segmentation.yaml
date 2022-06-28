@@ -1,7 +1,7 @@
 defaults:
-  - dataset: openpack-acc
-  - _self_
+  - dataset: atr-acc-wrists
   - override hydra/job_logging: custom
+  - _self_
 datarootdir: /home/bob/data
 issue: "I01-EXP1-V1"
 hydra:
@@ -11,12 +11,6 @@ hydra:
     chdir: true
 debug: true
 mode: "test"
-dataset:
-  streams:
-    atr-acc:
-      devices:
-        - "atr01"
-        - "atr02"
 train:
   num_workers: 3
   batch_size: 32
@@ -30,10 +24,9 @@ train:
     batch_size: 8
     epochs: 5
 path:
-  datasets:
-    rootdir: ${datarootdir}/datasets
+  openpack:
     version: v0.2.0
-    openpack: ${datarootdir}/datasets/openpack/${path.datasets.version}
+    rootdir: ${datarootdir}/datasets/openpack/${.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth

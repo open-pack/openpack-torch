@@ -1,5 +1,5 @@
 defaults:
-  - dataset: openpack-acc
+  - dataset: atr-acc-wrists
   - override hydra/job_logging: custom
   - _self_
 datarootdir: /home/bob/data
@@ -11,32 +11,25 @@ hydra:
     chdir: true
 debug: true
 mode: "test"
-dataset:
-  streams:
-    atr-acc:
-      devices:
-        - "atr01"
-        - "atr02"
 model:
   name: "UNet"
   depth: 5
 train:
   num_workers: 3
-  batch_size: 32
-  epochs: 200
+  batch_size: 64
+  epochs: 100
   window: 1800 # 30Hz * 60s
   optimizer:
     type: "Adam"
-    lr: 0.001
-    weight_decay: 0.0001
+    lr: 0.0001
+    weight_decay: 0.001
   debug:
     batch_size: 8
     epochs: 5
 path:
-  datasets:
-    rootdir: ${datarootdir}/datasets
+  openpack:
     version: v0.2.0
-    openpack: ${datarootdir}/datasets/openpack/${path.datasets.version}
+    rootdir: ${datarootdir}/datasets/openpack/${.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth
