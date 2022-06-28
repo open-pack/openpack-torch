@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openpack-torch"
-version = "0.1.0"
+version = "0.3.0"
 description = "PyTorch extention to work around with OpenPack dataset"
 authors = ["Yoshimura Naoya <yoshimura.naoya@ist.osaka-u.ac.jp>"]
 license = "MIT"
@@ -18,7 +18,7 @@ hydra-core = "^1.2.0"
 pytorch-lightning = "^1.6.3"
 omegaconf = "^2.2.1"
 tqdm = "^4.64.0"
-openpack-toolkit = "^0.2.0"
+openpack-toolkit = "^0.4.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

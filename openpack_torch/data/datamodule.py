@@ -4,8 +4,8 @@ Todo:
     * Add usage (Example Section).
     * Add unit-test.
 """
+import copy
 from logging import getLogger
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
@@ -51,10 +51,6 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
 
                 def get_kwargs_for_datasets(self) -> Dict:
                     kwargs = {
-                        "imu_nodes": self.cfg.dataset.imu_nodes,
-                        "use_acc": self.cfg.dataset.use_acc,
-                        "use_gyro": self.cfg.dataset.use_gyro,
-                        "use_quat": self.cfg.dataset.use_quat,
                         "window": self.cfg.train.window,
                         "debug": self.cfg.debug,
                     }
@@ -67,7 +63,6 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
 
     def _init_datasets(
         self,
-        rootdir: Path,
         user_session: Tuple[int, int],
         kwargs: Dict,
     ) -> Dict[str, torch.utils.data.Dataset]:
@@ -82,35 +77,36 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
             Dict[str, torch.utils.data.Dataset]: dataset objects
         """
         datasets = dict()
-        for user_id, session_id in user_session:
-            key = f"U{user_id:0=4}-S{session_id:0=4}"
+        for user, session in user_session:
+            key = f"{user}-{session}"
             datasets[key] = self.dataset_class(
-                rootdir, [(user_id, session_id)], **kwargs)
+                copy.deepcopy(self.cfg), [(user, session)], **kwargs)
         return datasets
 
     def setup(self, stage: Optional[str] = None) -> None:
-        rootdir = Path(self.cfg.dataset.volume.rootdir)
         split = self.cfg.dataset.split
         kwargs = self.get_kwargs_for_datasets()
 
         if stage in (None, "fit"):
-            self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
+            self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
         else:
             self.op_train = None
 
         if stage in (None, "fit", "validate"):
-            self.op_val = self._init_datasets(rootdir, split.val, kwargs)
+            self.op_val = self._init_datasets(split.val, kwargs)
         else:
             self.op_val = None
 
         if stage in (None, "test"):
-            self.op_test = self._init_datasets(rootdir, split.test, kwargs)
+            self.op_test = self._init_datasets(split.test, kwargs)
         else:
             self.op_test = None
 
         if stage in (None, "submission"):
-            self.op_submission = self._init_datasets(
-                rootdir, split.submission, kwargs)
+            kwargs.update({"submission": True})
+            self.op_submission = self._init_datasets(split.submission, kwargs)
+        elif stage == "test-on-submission":
+            self.op_submission = self._init_datasets(split.submission, kwargs)
         else:
             self.op_submission = None
 

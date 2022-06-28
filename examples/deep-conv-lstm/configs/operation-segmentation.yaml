@@ -1,0 +1,36 @@
+defaults:
+  - dataset: atr-acc-wrists
+  - override hydra/job_logging: custom
+  - _self_
+datarootdir: /home/bob/data
+issue: "I01-EXP1-V1"
+hydra:
+  run:
+    dir: ${path.logdir.rootdir}
+  job:
+    chdir: true
+debug: true
+mode: "test"
+train:
+  num_workers: 3
+  batch_size: 32
+  epochs: 200
+  window: 1800 # 30Hz * 60s
+  optimizer:
+    type: "Adam"
+    lr: 0.001
+    weight_decay: 0.0001
+  debug:
+    batch_size: 8
+    epochs: 5
+path:
+  openpack:
+    version: v0.2.0
+    rootdir: ${datarootdir}/datasets/openpack/${.version}
+  logdir:
+    rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
+    model: ${path.logdir.rootdir}/model.pth
+    predict: ${path.logdir.rootdir}/pred/{user}-{session}
+    summary: 
+      test: ${path.logdir.rootdir}/summary.csv
+      submission: ${path.logdir.rootdir}/summary_submission.csv

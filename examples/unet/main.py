@@ -16,6 +16,7 @@ from openpack_toolkit.codalab.operation_segmentation import (
     make_submission_zipfile)
 
 logger = getLogger(__name__)
+optorch.configs.register_configs()
 
 # ----------------------------------------------------------------------
 
@@ -37,17 +38,12 @@ def save_training_results(log: Dict, logdir: Path) -> None:
     print(df)
 
 
-# # # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackImu
 
     def get_kwargs_for_datasets(self) -> Dict:
-        imu_cfg = self.cfg.dataset.modality.imu
         kwargs = {
-            "imu_nodes": imu_cfg.nodes,
-            "use_acc": imu_cfg.use_acc,
-            "use_gyro": imu_cfg.use_gyro,
-            "use_quat": imu_cfg.use_quat,
             "window": self.cfg.train.window,
             "debug": self.cfg.debug,
         }
@@ -57,23 +53,25 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
 class UNetLM(optorch.lightning.BaseLightningModule):
 
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
-        imu_cfg = self.cfg.dataset.modality.imu
-        num_nodes = len(imu_cfg.nodes)
-
-        in_ch = 0
-        if imu_cfg.use_acc:
-            in_ch += num_nodes * 3
-        if imu_cfg.use_gyro:
-            in_ch += num_nodes * 3
-        if imu_cfg.use_quat:
-            in_ch += num_nodes * 4
+        dstream_conf = self.cfg.dataset.stream
+        in_ch = len(dstream_conf.devices) * 3
 
         model = optorch.models.imu.UNet(
             in_ch,
-            cfg.dataset.num_classes,
+            len(OPENPACK_OPERATIONS),
             depth=cfg.model.depth,
         )
         return model
+
+    def init_criterion(self, cfg: DictConfig):
+        ignore_cls = [
+            (i, c) for i, c in enumerate(
+                cfg.dataset.annotation.classes.classes) if c.is_ignore]
+
+        criterion = torch.nn.CrossEntropyLoss(
+            ignore_index=ignore_cls[-1][0]
+        )
+        return criterion
 
     def training_step(self, batch: Dict, batch_idx: int) -> Dict:
         x = batch["x"].to(device=self.device, dtype=torch.float)
@@ -100,7 +98,7 @@ class UNetLM(optorch.lightning.BaseLightningModule):
 
 def train(cfg: DictConfig):
     device = torch.device("cuda")
-    logdir = Path.cwd()
+    logdir = Path(cfg.path.logdir.rootdir)
     logger.debug(f"logdir = {logdir}")
     optk.utils.io.cleanup_dir(logdir, exclude="hydra")
 
@@ -138,11 +136,11 @@ def train(cfg: DictConfig):
 
 
 def test(cfg: DictConfig, mode: str = "test"):
-    assert mode in ("test", "submission")
+    assert mode in ("test", "submission", "test-on-submission")
     logger.debug(f"test() function is called with mode={mode}.")
 
     device = torch.device("cuda")
-    logdir = Path(cfg.volume.logdir.rootdir)
+    logdir = Path(cfg.path.logdir.rootdir)
 
     datamodule = OpenPackImuDataModule(cfg)
     datamodule.setup(mode)
@@ -164,19 +162,19 @@ def test(cfg: DictConfig, mode: str = "test"):
     if mode == "test":
         dataloaders = datamodule.test_dataloader()
         split = cfg.dataset.split.test
-    elif mode == "submission":
+    elif mode in ("submission", "test-on-submission"):
         dataloaders = datamodule.submission_dataloader()
         split = cfg.dataset.split.submission
     outputs = dict()
     for i, dataloader in enumerate(dataloaders):
         user, session = split[i]
-        logger.info(f"test on U{user:0=4}-S{session:0=4}")
+        logger.info(f"test on {user}-{session}")
 
         trainer.test(plmodel, dataloader)
 
         # save model outputs
         pred_dir = Path(
-            cfg.volume.logdir.predict.format(user=user, session=session)
+            cfg.path.logdir.predict.format(user=user, session=session)
         )
         pred_dir.mkdir(parents=True, exist_ok=True)
 
@@ -185,22 +183,30 @@ def test(cfg: DictConfig, mode: str = "test"):
             np.save(path, arr)
             logger.info(f"save {key}[shape={arr.shape}] to {path}")
 
-        key = f"U{user:0=4}-S{session:0=4}"
+        key = f"{user}-{session}"
         outputs[key] = {
             "y": plmodel.test_results.get("y"),
             "unixtime": plmodel.test_results.get("unixtime"),
         }
-        if mode == "test":
+        if mode in ("test", "test-on-submission"):
             outputs[key].update({
                 "t_idx": plmodel.test_results.get("t"),
             })
 
-    if mode == "test":
+    if mode in ("test", "test-on-submission"):
         # save performance summary
         df_summary = eval_operation_segmentation_wrapper(
             outputs, OPENPACK_OPERATIONS,
         )
-        path = Path(cfg.volume.logdir.summary)
+        if mode == "test":
+            path = Path(cfg.path.logdir.summary.test)
+        elif mode == "test-on-submission":
+            path = Path(cfg.path.logdir.summary.submission)
+
+        # NOTE: change pandas option to show tha all rows/cols.
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.max_columns', None)
+        pd.set_option("display.width", 200)
         df_summary.to_csv(path, index=False)
         logger.info(f"df_summary:\n{df_summary}")
     elif mode == "submission":
@@ -210,16 +216,21 @@ def test(cfg: DictConfig, mode: str = "test"):
         make_submission_zipfile(submission_dict, logdir)
 
 
-@ hydra.main(version_base=None, config_path="../../configs",
-             config_name="operation-segmentation-unet.yaml")
+@ hydra.main(version_base=None, config_path="./configs",
+             config_name="operation-segmentation.yaml")
 def main(cfg: DictConfig):
+    # DEBUG
+    if cfg.debug:
+        cfg.dataset.split = optk.configs.datasets.splits.DEBUG_SPLIT
+        cfg.path.logdir.rootdir += "/debug"
+
     print("===== Params =====")
     print(OmegaConf.to_yaml(cfg))
     print("==================")
 
     if cfg.mode == "train":
         train(cfg)
-    elif cfg.mode in ("test", "submission"):
+    elif cfg.mode in ("test", "submission", "test-on-submission"):
         test(cfg, mode=cfg.mode)
     else:
         raise ValueError(f"unknown mode [cfg.mode={cfg.mode}]")

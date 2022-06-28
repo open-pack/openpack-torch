@@ -1,17 +1,40 @@
+import copy
 from pathlib import Path
 
 import numpy as np
+import openpack_toolkit as optk
+import pytest
+from omegaconf import OmegaConf
 from openpack_toolkit import OPENPACK_OPERATIONS
 from openpack_torch.data.datasets import OpenPackImu, OpenPackKeypoint
 
 
-# -----------------------------------------------------------------------------
-def test_OpenPackImu_01():
-    rootdir = Path(__file__).parents[1] / "sample-data/openpack/"
-    user_session = ((0, 100), )
-    imu_nodes = ("atr01",)
+@pytest.fixture
+def opcfg():
+    rootdir = Path(__file__).parents[2] / "samples/openpack/${.version}"
 
-    dataset = OpenPackImu(rootdir, user_session, imu_nodes=imu_nodes)
+    cfg = OmegaConf.create({
+        "path": {
+            "openpack": {
+                "version": "vX.X.X",
+                "rootdir": str(rootdir),
+            }
+        },
+        "dataset": {
+            "stream": None,
+            "annotation": optk.configs.datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+        }
+    })
+    return cfg
+
+# -----------------------------------------------------------------------------
+
+
+def test_OpenPackImu_01(opcfg):
+    user_session = (("U0102", "S0500"), )
+    opcfg.dataset.stream = optk.configs.datasets.streams.ATR_ACC_STREAM
+
+    dataset = OpenPackImu(opcfg, user_session)
     print("Dataset:", dataset)
 
     for index in range(len(dataset)):
@@ -20,19 +43,17 @@ def test_OpenPackImu_01():
         print(
             f"index={index}: x={x.size()}[{x.dtype}], t={t.size()}[{t.dtype}],"
             f"t={ts.size()}[{ts.dtype}]")
-        np.testing.assert_array_equal(x.size(), (3, 1800, 1))
+        np.testing.assert_array_equal(x.size(), (3 * 4, 1800, 1))
 
 
-def test_OpenPackImu_02():
+def test_OpenPackImu_02(opcfg):
     """ submission = True """
-    rootdir = Path(__file__).parents[1] / "sample-data/openpack/"
-    user_session = ((0, 100), )
-    imu_nodes = ("atr01", "atr01")
+    user_session = (("U0102", "S0500"), )
+    opcfg.dataset.stream = optk.configs.datasets.streams.ATR_ACC_STREAM
 
     dataset = OpenPackImu(
-        rootdir,
+        opcfg,
         user_session,
-        imu_nodes=imu_nodes,
         submission=True)
     print("Dataset:", dataset)
 
@@ -44,26 +65,24 @@ def test_OpenPackImu_02():
             f"index={index}: x={x.size()}[{x.dtype}], t={t.size()}[{t.dtype}],"
             f"t={ts.size()}[{ts.dtype}][set={t_set}]")
 
-        np.testing.assert_array_equal(x.size(), (6, 1800, 1))
+        np.testing.assert_array_equal(x.size(), (3 * 4, 1800, 1))
         assert t_set <= set(
             [0, OPENPACK_OPERATIONS.get_ignore_class_index()])
 
 # -----------------------------------------------------------------------------
 
 
-def test_OpenPackKeypoint_01():
-    rootdir = Path(__file__).parents[1] / "sample-data/openpack/"
-    user_session = ((0, 100), )
-    keypoint_type = "mmpose-hrnet-mmdet/cleaned"
+def test_OpenPackKeypoint_01(opcfg):
+    user_session = (("U0102", "S0500"), )
+    opcfg.dataset.stream = optk.configs.datasets.streams.KINECT_2D_KPT_STREAM
 
     dataset = OpenPackKeypoint(
-        rootdir,
+        copy.deepcopy(opcfg),
         user_session,
-        keypoint_type=keypoint_type,
         window=30)
     print("Dataset:", dataset)
 
-    for index in range(len(dataset)):
+    for index in range(0, min(10, len(dataset))):
         batch = dataset.__getitem__(index)
         x, t, ts = batch["x"], batch["t"], batch["ts"]
         print(

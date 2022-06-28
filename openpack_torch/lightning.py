@@ -83,10 +83,21 @@ class BaseLightningModule(pl.LightningModule):
                 log[f"train/{key}"] = torch.stack(vals).mean().item()
         self.log["train"].append(log)
 
-    def validation_step(self, batch: Dict, batch_idx: int) -> Dict:
+    def validation_step(
+            self,
+            batch: Dict,
+            batch_idx: int,
+            dataloader_idx: int = 0) -> Dict:
         return self.training_step(batch, batch_idx)
 
     def validation_epoch_end(self, outputs):
+        if isinstance(outputs[0], list):
+            # When multiple dataloader is used.
+            _outputs = []
+            for out in outputs:
+                _outputs += out
+            outputs = _outputs
+
         log = dict()
         for key in self.log_keys:
             vals = [x[key] for x in outputs if key in x.keys()]
