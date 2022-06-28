@@ -43,12 +43,7 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackImu
 
     def get_kwargs_for_datasets(self) -> Dict:
-        imu_cfg = self.cfg.dataset.streams["atr-acc"]
         kwargs = {
-            "imu_nodes": imu_cfg.devices,
-            "use_acc": imu_cfg.acc,
-            "use_gyro": imu_cfg.gyro,
-            "use_quat": imu_cfg.quat,
             "window": self.cfg.train.window,
             "debug": self.cfg.debug,
         }
@@ -58,7 +53,7 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
 class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
 
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
-        dstream_conf = self.cfg.dataset.streams["atr-acc"]
+        dstream_conf = self.cfg.dataset.stream
         in_ch = len(dstream_conf.devices) * 3
 
         model = optorch.models.imu.DeepConvLSTM(
@@ -144,7 +139,6 @@ def test(cfg: DictConfig, mode: str = "test"):
     plmodel = DeepConvLSTMLM.load_from_checkpoint(ckpt_path, cfg=cfg)
     plmodel.to(dtype=torch.float, device=device)
 
-    # num_epoch = cfg.train.debug.epochs if cfg.debug else cfg.train.epochs
     trainer = pl.Trainer(
         gpus=[0],
         logger=False,  # disable logging module
@@ -200,6 +194,7 @@ def test(cfg: DictConfig, mode: str = "test"):
         # NOTE: change pandas option to show tha all rows/cols.
         pd.set_option('display.max_rows', None)
         pd.set_option('display.max_columns', None)
+        pd.set_option("display.width", 200)
         df_summary.to_csv(path, index=False)
         logger.info(f"df_summary:\n{df_summary}")
     elif mode == "submission":
@@ -213,7 +208,6 @@ def test(cfg: DictConfig, mode: str = "test"):
              config_name="deep-conv-lstm.yaml")
 def main(cfg: DictConfig):
     # DEBUG
-    cfg.dataset.annot.classes = OPENPACK_OPERATIONS
     if cfg.debug:
         cfg.dataset.split = optk.configs.datasets.splits.DEBUG_SPLIT
         cfg.path.logdir.rootdir += "/debug"

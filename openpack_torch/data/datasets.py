@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import openpack_toolkit as optk
 import torch
+from omegaconf import DictConfig, open_dict
 from openpack_toolkit import OPENPACK_OPERATIONS
 
 logger = getLogger(__name__)
@@ -27,103 +28,98 @@ class OpenPackImu(torch.utils.data.Dataset):
         debug (bool): If True, enable debug mode. Default to False.
         submission (bool): Set True when you make submission file. Annotation data will not be
             loaded and dummy data will be generated. Default to False.
+
+    Todo:
+        * Make a minimum copy of cfg (DictConfig) before using in ``load_dataset()``.
+        * Add method for parameter validation (i.e., assert).
     """
     data: List[Dict] = None
     index: Tuple[Dict] = None
 
     def __init__(
             self,
-            rootdir: Path,
-            user_session: Tuple[Tuple[int, int], ...],
-            imu_nodes: Tuple[str] = None,
-            use_acc: bool = True,
-            use_gyro: bool = False,
-            use_quat: bool = False,
-            debug: bool = False,
+            cfg: DictConfig,
+            user_session_list: Tuple[Tuple[int, int], ...],
+            classes: optk.ActSet = OPENPACK_OPERATIONS,
             window: int = 30 * 60,
             submission: bool = False,
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
+            debug: bool = False,
     ) -> None:
         """Initialize OpenPackImu dataset class.
 
         Args:
-            rootdir (Path): path to the rootdirectory of OpenPack dataset.
+            cfg (DictConfig): instance of ``optk.configs.OpenPackConfig``. path, dataset, and
+                annotation attributes must be initialized.
             user_session (Tuple[Tuple[int, int], ...]): the list of pairs of user ID and session ID
                 to be included.
-            imu_nodes (Tuple[str], optional): the list of IMU node names. Defaults to None.
-            use_acc (bool, optional): If True, include acceleration data. Defaults to True.
-            use_gyro (bool, optional): If True, include gyroscope data. Defaults to False.
-            use_quat (bool, optional): If True, include quaternion data. Defaults to False.
-            debug (bool, optional): enable debug mode. Defaults to False.
-            window (int, optional): window size [steps]. Defaults to 30*60.
-            submission (bool, optional): Set True when you want to load test data for submission.
-                If True, the annotation data will no be replaced by dummy data. Defaults to False.
             classes (optk.ActSet, optional): activity set definition.
                 Defaults to OPENPACK_OPERATION_CLASSES.
+            window (int, optional): window size [steps]. Defaults to 30*60 [s].
+            submission (bool, optional): Set True when you want to load test data for submission.
+                If True, the annotation data will no be replaced by dummy data. Defaults to False.
+            debug (bool, optional): enable debug mode. Defaults to False.
         """
         super().__init__()
-        self.window = window
-        self.debug = debug
-        self.submission = submission
         self.classes = classes
+        self.window = window
+        self.submission = submission
+        self.debug = debug
 
-        if imu_nodes is None:
-            imu_nodes = ("atr01", "atr02", "atr03", "atr04")
         self.load_dataset(
-            rootdir,
-            user_session,
-            imu_nodes,
+            cfg,
+            user_session_list,
             window,
-            use_acc=use_acc,
-            use_gyro=use_gyro,
-            use_quat=use_quat,
-            submission=submission,
-        )
+            submission=submission)
+
         self.preprocessing()
 
     def load_dataset(
         self,
-        rootdir: Path,
-        user_session: Tuple[Tuple[str, str], ...],
-        imu_nodes: Tuple[str, ...],
+        cfg: DictConfig,
+        user_session_list: Tuple[Tuple[int, int], ...],
         window: int = None,
-        use_acc: bool = True,
-        use_gyro: bool = False,
-        use_quat: bool = False,
         submission: bool = False,
     ) -> None:
         """Called in ``__init__()`` and load required data.
 
         Args:
-            rootdir (Path): _description_
             user_session (Tuple[Tuple[str, str], ...]): _description_
-            imu_nodes (Tuple[str, ...]): _description_
             window (int, optional): _description_. Defaults to None.
-            use_acc (bool, optional): _description_. Defaults to True.
-            use_gyro (bool, optional): _description_. Defaults to False.
-            use_quat (bool, optional): _description_. Defaults to False.
             submission (bool, optional): _description_. Defaults to False.
         """
         data, index = [], []
-        for seq_idx, (user, session) in enumerate(user_session):
-            paths_imu = tuple([Path(
-                rootdir, user, "atr", node, f"{session}.csv",
-            ) for node in imu_nodes])
+        for seq_idx, (user, session) in enumerate(user_session_list):
+            with open_dict(cfg):
+                cfg.user = {"name": user}
+                cfg.session = session
+
+            paths_imu = []
+            for device in cfg.dataset.stream.devices:
+                with open_dict(cfg):
+                    cfg.device = device
+
+                path = Path(
+                    cfg.dataset.stream.path.dir,
+                    cfg.dataset.stream.path.fname
+                )
+                paths_imu.append(path)
+
             ts_sess, x_sess = optk.data.load_imu(
-                paths_imu, use_acc=use_acc, use_gyro=use_gyro, use_quat=use_quat)
+                paths_imu,
+                use_acc=cfg.dataset.stream.acc,
+                use_gyro=cfg.dataset.stream.gyro,
+                use_quat=cfg.dataset.stream.quat)
 
             if submission:
                 # For set dummy data.
                 label = np.zeros((len(ts_sess),), dtype=np.int64)
             else:
-                path_annot = Path(
-                    rootdir,
-                    user,
-                    "annotation/openpack-operations",
-                    f"{session}.csv",
+                path = Path(
+                    cfg.dataset.annotation.path.dir,
+                    cfg.dataset.annotation.path.fname
                 )
                 df_label = optk.data.load_and_resample_operation_labels(
-                    path_annot, ts_sess, classes=self.classes)
+                    path, ts_sess, classes=self.classes)
                 label = df_label["act_idx"].values
 
             data.append({
@@ -225,70 +221,67 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
 
     def __init__(
             self,
-            rootdir: Path,
+            cfg: DictConfig,
             user_session: Tuple[Tuple[int, int], ...],
-            keypoint_type: str = None,
-            debug: bool = False,
+            classes: optk.ActSet = OPENPACK_OPERATIONS,
             window: int = 15 * 60,
             submission: bool = False,
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
+            debug: bool = False,
     ) -> None:
         """Initialize OpenPackKyepoint dataset class.
 
         Args:
-            rootdir (Path): _description_
-            keypoint_type (str): _description_
+            cfg (DictConfig): instance of ``optk.configs.OpenPackConfig``. path, dataset, and
+                annotation attributes must be initialized.
             user_session (Tuple[Tuple[int, int], ...]): _description_
-            debug (bool, optional): enable debug mode. Defaults to False.
-            window (int, optional): window size. Defaults to 15*60 [frames].
-            submission (bool, optional): _description_. Defaults to False.
             classes (optk.ActSet, optional): activity set definition.
                 Defaults to OPENPACK_OPERATION_CLASSES.
+            window (int, optional): window size. Defaults to 15*60 [frames].
+            submission (bool, optional): _description_. Defaults to False.
+            debug (bool, optional): enable debug mode. Defaults to False.
         """
         super().__init__()
         self.window = window
-        self.debug = debug
         self.classes = classes
         self.submission = submission
+        self.debug = debug
 
         self.load_dataset(
-            rootdir,
-            keypoint_type,
+            cfg,
             user_session,
             submission=submission)
+
         self.preprocessing()
 
     def load_dataset(
         self,
-        rootdir: Path,
-        keypoint_type: str,
+        cfg: DictConfig,
         user_session: Tuple[Tuple[int, int], ...],
         submission: bool = False,
     ):
         data, index = [], []
         for seq_idx, (user, session) in enumerate(user_session):
-            path_skeleton = Path(
-                rootdir,
-                user,
-                "kinect/2d-kpt",  # FIXME: replace this hard-coded value
-                keypoint_type,
-                f"{session}.json",
+            with open_dict(cfg):
+                cfg.user = {"name": user}
+                cfg.session = session
+
+            path = Path(
+                cfg.dataset.stream.path.dir,
+                cfg.dataset.stream.path.fname,
             )
-            ts_sess, x_sess = optk.data.load_keypoints(path_skeleton)
+            ts_sess, x_sess = optk.data.load_keypoints(path)
             x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
 
             if submission:
                 # For set dummy data.
                 label = np.zeros((len(ts_sess),), dtype=np.int64)
             else:
-                path_annot = Path(
-                    rootdir,
-                    user,
-                    "annotation/openpack-operations",
-                    f"{session}.csv",
+                path = Path(
+                    cfg.dataset.annotation.path.dir,
+                    cfg.dataset.annotation.path.fname
                 )
                 df_label = optk.data.load_and_resample_operation_labels(
-                    path_annot, ts_sess, classes=self.classes)
+                    path, ts_sess, classes=self.classes)
                 label = df_label["act_idx"].values
 
             data.append({

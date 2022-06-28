@@ -38,6 +38,19 @@ poetry add  openpack-torch
 - Keypoints
   - [ST-GCN](./examples/st-gcn)
 
+#### Scores of Baseline Moodel (Preliminary Experiments)
+
+##### Split: Pilot Challenge
+
+| Model                    | F1 (Test Set) | F1 (Submission Set) | Date       | Code |
+|--------------------------|---------------|---------------------|------------|------|
+| UNet                     | 0.3451        | 0.3747              | 2022-06-28 | [main.py](./examples/unet/main.py) |
+| DeepConvLSTM             | 0.7081        | 0.7695              | 2022-06-28 | [main.py](./examples/deep-conv-lstm/main.py) |
+| DeepConvLSTM + Self-Attn | 0.8161        | 0.8409              | 2022-06-28 | [main.py](./examples/deep-conv-lstm/main_self_attention.py) |
+| ST-GCN                   | -             | -                   |            |      |
+
+NOTE: F1 = F1-measure (macro average)
+
 ## LICENCE
 
 This software (openpack-torch) is distributed under [MIT Licence](./LICENSE).

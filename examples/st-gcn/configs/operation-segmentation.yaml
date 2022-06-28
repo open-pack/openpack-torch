@@ -28,10 +28,9 @@ train:
     batch_size: 8
     epochs: 5
 path:
-  datasets:
-    rootdir: ${datarootdir}/datasets
+  openpack:
     version: v0.2.0
-    openpack: ${datarootdir}/datasets/openpack/${path.datasets.version}
+    rootdir: ${datarootdir}/datasets/openpack/${.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth
