@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.10.0" />
-<title>openpack_torch API documentation</title>
+<title>openpack_torch.configs.datasets API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
@@ -19,39 +19,33 @@
 <main>
 <article id="content">
 <header>
-<h1 class="title">Package <code>openpack_torch</code></h1>
+<h1 class="title">Module <code>openpack_torch.configs.datasets</code></h1>
 </header>
 <section id="section-intro">
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">__version__ = &#39;0.3.0&#39;
-from . import configs, data, lightning, models
+<pre><code class="python">from openpack_toolkit.configs import DatasetConfig, datasets
 
-__all__ = [&#34;configs&#34;, &#34;data&#34;, &#34;lightning&#34;, &#34;models&#34;]</code></pre>
+OPENPACK_ACC_DATASET_CONFIG = DatasetConfig(
+    name=&#34;openpack-acc&#34;,
+    streams=None,
+    stream=datasets.streams.ATR_ACC_STREAM,
+    split=datasets.splits.PILOT_CHALLENGE_SPLIT,
+    annotation=datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+)
+
+OPENPACK_2D_KEYPOINT_DATASET_CONFIG = DatasetConfig(
+    name=&#34;openpack-2d-kpt&#34;,
+    streams=None,
+    stream=datasets.streams.KINECT_2D_KPT_STREAM,
+    split=datasets.splits.PILOT_CHALLENGE_SPLIT,
+    annotation=datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+)</code></pre>
 </details>
 </section>
 <section>
-<h2 class="section-title" id="header-submodules">Sub-modules</h2>
-<dl>
-<dt><code class="name"><a title="openpack_torch.configs" href="configs/index.html">openpack_torch.configs</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt><code class="name"><a title="openpack_torch.data" href="data/index.html">openpack_torch.data</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt><code class="name"><a title="openpack_torch.lightning" href="lightning.html">openpack_torch.lightning</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt><code class="name"><a title="openpack_torch.models" href="models/index.html">openpack_torch.models</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
 </section>
 <section>
 </section>
@@ -66,12 +60,9 @@ __all__ = [&#34;configs&#34;, &#34;data&#34;, &#34;lightning&#34;, &#34;models&#
 <ul></ul>
 </div>
 <ul id="index">
-<li><h3><a href="#header-submodules">Sub-modules</a></h3>
+<li><h3>Super-module</h3>
 <ul>
-<li><code><a title="openpack_torch.configs" href="configs/index.html">openpack_torch.configs</a></code></li>
-<li><code><a title="openpack_torch.data" href="data/index.html">openpack_torch.data</a></code></li>
-<li><code><a title="openpack_torch.lightning" href="lightning.html">openpack_torch.lightning</a></code></li>
-<li><code><a title="openpack_torch.models" href="models/index.html">openpack_torch.models</a></code></li>
+<li><code><a title="openpack_torch.configs" href="index.html">openpack_torch.configs</a></code></li>
 </ul>
 </li>
 </ul>

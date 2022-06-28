@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.10.0" />
-<title>openpack_torch.models.imu API documentation</title>
-<meta name="description" content="" />
+<title>openpack_torch.models.imu.deep_conv_lstm API documentation</title>
+<meta name="description" content="Implementation of DeepConvLSTM
+Reference:
+- https://www.mdpi.com/1424-8220/16/1/115" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -19,33 +21,168 @@
 <main>
 <article id="content">
 <header>
-<h1 class="title">Module <code>openpack_torch.models.imu</code></h1>
+<h1 class="title">Module <code>openpack_torch.models.imu.deep_conv_lstm</code></h1>
 </header>
 <section id="section-intro">
+<p>Implementation of DeepConvLSTM
+Reference:
+- <a href="https://www.mdpi.com/1424-8220/16/1/115">https://www.mdpi.com/1424-8220/16/1/115</a></p>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from .deep_conv_lstm import DeepConvLSTM, DeepConvLSTMSelfAttn
-from .unet import UNet
+<pre><code class="python">&#34;&#34;&#34; Implementation of DeepConvLSTM
+Reference:
+- https://www.mdpi.com/1424-8220/16/1/115
+&#34;&#34;&#34;
+import torch
+from torch import nn
 
-__all__ = [&#34;DeepConvLSTM&#34;, &#34;DeepConvLSTMSelfAttn&#34;, &#34;UNet&#34;]</code></pre>
+
+class DeepConvLSTM(nn.Module):
+    &#34;&#34;&#34;Imprementation of DeepConvLSTM [Sensors 2016].
+
+    Note:
+        https://www.mdpi.com/1424-8220/16/1/115 (Sensors, 2016)
+
+    &#34;&#34;&#34;
+
+    def __init__(self, in_ch: int = 6, num_classes: int = None):
+        super().__init__()
+
+        # NOTE: The first block is input layer.
+
+        # -- [L2-5] Convolutions --
+        blocks = []
+        for i in range(4):
+            in_ch_ = in_ch if i == 0 else 64
+            blocks.append(
+                nn.Sequential(
+                    nn.Conv2d(in_ch_, 64, kernel_size=(5, 1), padding=(2, 0)),
+                    nn.BatchNorm2d(64),
+                    nn.ReLU(),
+                )
+            )
+        self.conv2to5 = nn.ModuleList(blocks)
+
+        # -- [L6-7] LSTM --
+        hidden_units = 128
+        self.lstm6 = nn.LSTM(64, hidden_units, batch_first=True)
+        self.lstm7 = nn.LSTM(hidden_units, hidden_units, batch_first=True)
+        self.dropout6 = nn.Dropout(p=0.5)
+        self.dropout7 = nn.Dropout(p=0.5)
+
+        # -- [L8] Softmax Layer (Output Layer) --
+        self.out8 = nn.Conv2d(
+            hidden_units,
+            num_classes,
+            1,
+            stride=1,
+            padding=0,
+        )
+
+    def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
+        &#34;&#34;&#34;
+        Args:
+            x (torch.Tensor): shape = (B, CH, T, 1)
+        Returns:
+            torch.Tensor: shape = (B, N_CLASSES, T, 1)
+        &#34;&#34;&#34;
+        # -- Conv --
+        for i in range(4):
+            x = self.conv2to5[i](x)
+
+        # -- LSTM --
+        # Reshape: (B, CH, 1, T) -&gt; (B, T, CH)
+        x = x.squeeze(3).transpose(1, 2)
+
+        x, _ = self.lstm6(x)
+        x = self.dropout6(x)
+        x, _ = self.lstm7(x)
+        x = self.dropout7(x)
+
+        # -- [L8] Softmax Layer (Output Layer) --
+        # Reshape: (B, T, CH) -&gt; (B, CH, T, 1)
+        x = x.transpose(1, 2).unsqueeze(3)
+        x = self.out8(x)
+        return x
+
+
+class DeepConvLSTMSelfAttn(nn.Module):
+    &#34;&#34;&#34;Imprementation of a DeepConvLSTM with Self-Attention used in &#39;&#39;Deep ConvLSTM with
+    self-attention for human activity decoding using wearable sensors&#39;&#39; (Sensors 2020).
+
+    Note:
+        https://ieeexplore.ieee.org/document/9296308 (Sensors 2020)
+    &#34;&#34;&#34;
+
+    def __init__(
+        self,
+        in_ch: int = 6,
+        num_classes: int = None,
+        cnn_filters=3,
+        lstm_units=32,
+        num_attn_heads: int = 1,
+    ):
+        super().__init__()
+
+        # NOTE: The first block is input layer.
+
+        # -- [1] Embedding Layer --
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_ch, cnn_filters, kernel_size=1, padding=0),
+            nn.BatchNorm2d(cnn_filters),
+            nn.ReLU(),
+        )
+
+        # -- [2] LSTM Encoder --
+        self.lstm = nn.LSTM(cnn_filters, lstm_units, batch_first=True)
+        self.dropout = nn.Dropout(p=0.5)
+
+        # -- [3] Self-Attention --
+        self.attention = nn.MultiheadAttention(
+            lstm_units,
+            num_attn_heads,
+            batch_first=True,
+        )
+
+        # -- [4] Softmax Layer (Output Layer) --
+        self.out = nn.Conv2d(
+            lstm_units,
+            num_classes,
+            1,
+            stride=1,
+            padding=0,
+        )
+
+    def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
+        &#34;&#34;&#34;
+        Args:
+            x (torch.Tensor): shape = (B, CH, T, 1)
+        Returns:
+            torch.Tensor: shape = (B, N_CLASSES, T, 1)
+        &#34;&#34;&#34;
+        # -- [1] Embedding Layer --
+        x = self.conv(x)
+
+        # -- [2] LSTM Encoder --
+        # Reshape: (B, CH, 1, T) -&gt; (B, T, CH)
+        x = x.squeeze(3).transpose(1, 2)
+
+        x, _ = self.lstm(x)
+        x = self.dropout(x)
+
+        # -- [3] Self-Attention --
+        x, w = self.attention(x.clone(), x.clone(), x.clone())
+
+        # -- [4] Softmax Layer (Output Layer) --
+        # Reshape: (B, T, CH) -&gt; (B, CH, T, 1)
+        x = x.transpose(1, 2).unsqueeze(3)
+        x = self.out(x)
+        return x</code></pre>
 </details>
 </section>
 <section>
-<h2 class="section-title" id="header-submodules">Sub-modules</h2>
-<dl>
-<dt><code class="name"><a title="openpack_torch.models.imu.deep_conv_lstm" href="deep_conv_lstm.html">openpack_torch.models.imu.deep_conv_lstm</a></code></dt>
-<dd>
-<div class="desc"><p>Implementation of DeepConvLSTM
-Reference:
-- <a href="https://www.mdpi.com/1424-8220/16/1/115">https://www.mdpi.com/1424-8220/16/1/115</a></p></div>
-</dd>
-<dt><code class="name"><a title="openpack_torch.models.imu.unet" href="unet.html">openpack_torch.models.imu.unet</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
 </section>
 <section>
 </section>
@@ -54,7 +191,7 @@ Reference:
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
-<dt id="openpack_torch.models.imu.DeepConvLSTM"><code class="flex name class">
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM"><code class="flex name class">
 <span>class <span class="ident">DeepConvLSTM</span></span>
 <span>(</span><span>in_ch: int = 6, num_classes: int = None)</span>
 </code></dt>
@@ -141,18 +278,18 @@ Reference:
 </ul>
 <h3>Class variables</h3>
 <dl>
-<dt id="openpack_torch.models.imu.DeepConvLSTM.dump_patches"><code class="name">var <span class="ident">dump_patches</span> : bool</code></dt>
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.dump_patches"><code class="name">var <span class="ident">dump_patches</span> : bool</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
-<dt id="openpack_torch.models.imu.DeepConvLSTM.training"><code class="name">var <span class="ident">training</span> : bool</code></dt>
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.training"><code class="name">var <span class="ident">training</span> : bool</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
 </dl>
 <h3>Methods</h3>
 <dl>
-<dt id="openpack_torch.models.imu.DeepConvLSTM.forward"><code class="name flex">
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.forward"><code class="name flex">
 <span>def <span class="ident">forward</span></span>(<span>self, x: torch.Tensor) ‑> torch.Tensor</span>
 </code></dt>
 <dd>
@@ -199,7 +336,7 @@ Reference:
 </dd>
 </dl>
 </dd>
-<dt id="openpack_torch.models.imu.DeepConvLSTMSelfAttn"><code class="flex name class">
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn"><code class="flex name class">
 <span>class <span class="ident">DeepConvLSTMSelfAttn</span></span>
 <span>(</span><span>in_ch: int = 6, num_classes: int = None, cnn_filters=3, lstm_units=32, num_attn_heads: int = 1)</span>
 </code></dt>
@@ -292,18 +429,18 @@ self-attention for human activity decoding using wearable sensors'' (Sensors 202
 </ul>
 <h3>Class variables</h3>
 <dl>
-<dt id="openpack_torch.models.imu.DeepConvLSTMSelfAttn.dump_patches"><code class="name">var <span class="ident">dump_patches</span> : bool</code></dt>
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.dump_patches"><code class="name">var <span class="ident">dump_patches</span> : bool</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
-<dt id="openpack_torch.models.imu.DeepConvLSTMSelfAttn.training"><code class="name">var <span class="ident">training</span> : bool</code></dt>
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.training"><code class="name">var <span class="ident">training</span> : bool</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
 </dl>
 <h3>Methods</h3>
 <dl>
-<dt id="openpack_torch.models.imu.DeepConvLSTMSelfAttn.forward"><code class="name flex">
+<dt id="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.forward"><code class="name flex">
 <span>def <span class="ident">forward</span></span>(<span>self, x: torch.Tensor) ‑> torch.Tensor</span>
 </code></dt>
 <dd>
@@ -350,130 +487,6 @@ self-attention for human activity decoding using wearable sensors'' (Sensors 202
 </dd>
 </dl>
 </dd>
-<dt id="openpack_torch.models.imu.UNet"><code class="flex name class">
-<span>class <span class="ident">UNet</span></span>
-<span>(</span><span>in_ch: int = 6, num_classes: int = None, ch_inc: int = 32, depth: int = 5)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Input must take channel-first format (BCHW).
-This model use 2D convolutional filter with kernel size = (f x 1).
-See also original U-net paper at <a href="http://arxiv.org/abs/1505.04597">http://arxiv.org/abs/1505.04597</a></p>
-<h2 id="note">Note</h2>
-<p>Time axis should come in the 3rd dimention (i.e., H).</p>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>in_ch</code></strong> :&ensp;<code>int</code></dt>
-<dd>-</dd>
-<dt><strong><code>num_classes</code></strong> :&ensp;<code>int</code></dt>
-<dd>The number of classes to model.</dd>
-<dt>ch_inc (int, optional):</dt>
-<dt>the number of input channels for UNetEncoder. (Default: 32)</dt>
-<dt>pools (tuple of int):</dt>
-<dt>list of kernel sizes for pooling operations.</dt>
-<dt><strong><code>depth</code></strong> :&ensp;<code>int</code></dt>
-<dd>the number of blocks for Encoder/Decoder.</dd>
-</dl></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class UNet(nn.Module):
-    &#34;&#34;&#34;
-    Input must take channel-first format (BCHW).
-    This model use 2D convolutional filter with kernel size = (f x 1).
-    See also original U-net paper at http://arxiv.org/abs/1505.04597
-    Note:
-        Time axis should come in the 3rd dimention (i.e., H).
-    &#34;&#34;&#34;
-
-    def __init__(
-        self,
-        in_ch: int = 6,
-        num_classes: int = None,
-        ch_inc: int = 32,
-        depth: int = 5,
-    ):
-        &#34;&#34;&#34;
-        Args:
-            in_ch (int): -
-            num_classes (int): The number of classes to model.
-            ch_inc (int, optional):
-                the number of input channels for UNetEncoder. (Default: 32)
-            pools (tuple of int):
-               list of kernel sizes for pooling operations.
-            depth (int): the number of blocks for Encoder/Decoder.
-        &#34;&#34;&#34;
-        super().__init__()
-
-        # NOTE: Add input encoding layer (UNet)
-        # Ref:
-        # https://github.com/milesial/Pytorch-UNet/blob/master/unet/unet_model.py
-        self.inc = nn.Sequential(
-            nn.Conv2d(
-                in_ch,
-                ch_inc,
-                kernel_size=(3, 1),
-                stride=(1, 1),
-                padding=(1, 0),
-            ),
-            nn.BatchNorm2d(ch_inc),
-            nn.ReLU(),
-        )
-        self.encoder = UNetEncoder(ch_inc, depth=depth)
-        self.decoder = UNetDecoder(ch_inc, depth=depth)
-        self.dense_clf = nn.Conv2d(ch_inc, num_classes, 1, padding=0, stride=1)
-
-    def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
-        x = self.inc(x)
-        (x, res) = self.encoder(x)
-        x = self.decoder(x, res)
-        x = self.dense_clf(x)
-        return x</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>torch.nn.modules.module.Module</li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="openpack_torch.models.imu.UNet.dump_patches"><code class="name">var <span class="ident">dump_patches</span> : bool</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="openpack_torch.models.imu.UNet.training"><code class="name">var <span class="ident">training</span> : bool</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Methods</h3>
-<dl>
-<dt id="openpack_torch.models.imu.UNet.forward"><code class="name flex">
-<span>def <span class="ident">forward</span></span>(<span>self, x: torch.Tensor) ‑> torch.Tensor</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the :class:<code>Module</code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
-    x = self.inc(x)
-    (x, res) = self.encoder(x)
-    x = self.decoder(x, res)
-    x = self.dense_clf(x)
-    return x</code></pre>
-</details>
-</dd>
-</dl>
-</dd>
 </dl>
 </section>
 </article>
@@ -485,39 +498,25 @@ registered hooks while the latter silently ignores them.</p>
 <ul id="index">
 <li><h3>Super-module</h3>
 <ul>
-<li><code><a title="openpack_torch.models" href="../index.html">openpack_torch.models</a></code></li>
-</ul>
-</li>
-<li><h3><a href="#header-submodules">Sub-modules</a></h3>
-<ul>
-<li><code><a title="openpack_torch.models.imu.deep_conv_lstm" href="deep_conv_lstm.html">openpack_torch.models.imu.deep_conv_lstm</a></code></li>
-<li><code><a title="openpack_torch.models.imu.unet" href="unet.html">openpack_torch.models.imu.unet</a></code></li>
+<li><code><a title="openpack_torch.models.imu" href="index.html">openpack_torch.models.imu</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
 <li>
-<h4><code><a title="openpack_torch.models.imu.DeepConvLSTM" href="#openpack_torch.models.imu.DeepConvLSTM">DeepConvLSTM</a></code></h4>
+<h4><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM">DeepConvLSTM</a></code></h4>
 <ul class="">
-<li><code><a title="openpack_torch.models.imu.DeepConvLSTM.dump_patches" href="#openpack_torch.models.imu.DeepConvLSTM.dump_patches">dump_patches</a></code></li>
-<li><code><a title="openpack_torch.models.imu.DeepConvLSTM.forward" href="#openpack_torch.models.imu.DeepConvLSTM.forward">forward</a></code></li>
-<li><code><a title="openpack_torch.models.imu.DeepConvLSTM.training" href="#openpack_torch.models.imu.DeepConvLSTM.training">training</a></code></li>
+<li><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.dump_patches" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.dump_patches">dump_patches</a></code></li>
+<li><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.forward" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.forward">forward</a></code></li>
+<li><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.training" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTM.training">training</a></code></li>
 </ul>
 </li>
 <li>
-<h4><code><a title="openpack_torch.models.imu.DeepConvLSTMSelfAttn" href="#openpack_torch.models.imu.DeepConvLSTMSelfAttn">DeepConvLSTMSelfAttn</a></code></h4>
+<h4><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn">DeepConvLSTMSelfAttn</a></code></h4>
 <ul class="">
-<li><code><a title="openpack_torch.models.imu.DeepConvLSTMSelfAttn.dump_patches" href="#openpack_torch.models.imu.DeepConvLSTMSelfAttn.dump_patches">dump_patches</a></code></li>
-<li><code><a title="openpack_torch.models.imu.DeepConvLSTMSelfAttn.forward" href="#openpack_torch.models.imu.DeepConvLSTMSelfAttn.forward">forward</a></code></li>
-<li><code><a title="openpack_torch.models.imu.DeepConvLSTMSelfAttn.training" href="#openpack_torch.models.imu.DeepConvLSTMSelfAttn.training">training</a></code></li>
-</ul>
-</li>
-<li>
-<h4><code><a title="openpack_torch.models.imu.UNet" href="#openpack_torch.models.imu.UNet">UNet</a></code></h4>
-<ul class="">
-<li><code><a title="openpack_torch.models.imu.UNet.dump_patches" href="#openpack_torch.models.imu.UNet.dump_patches">dump_patches</a></code></li>
-<li><code><a title="openpack_torch.models.imu.UNet.forward" href="#openpack_torch.models.imu.UNet.forward">forward</a></code></li>
-<li><code><a title="openpack_torch.models.imu.UNet.training" href="#openpack_torch.models.imu.UNet.training">training</a></code></li>
+<li><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.dump_patches" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.dump_patches">dump_patches</a></code></li>
+<li><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.forward" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.forward">forward</a></code></li>
+<li><code><a title="openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.training" href="#openpack_torch.models.imu.deep_conv_lstm.DeepConvLSTMSelfAttn.training">training</a></code></li>
 </ul>
 </li>
 </ul>

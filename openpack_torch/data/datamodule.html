@@ -38,8 +38,8 @@ Todo:
     * Add usage (Example Section).
     * Add unit-test.
 &#34;&#34;&#34;
+import copy
 from logging import getLogger
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
@@ -85,10 +85,6 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
 
                 def get_kwargs_for_datasets(self) -&gt; Dict:
                     kwargs = {
-                        &#34;imu_nodes&#34;: self.cfg.dataset.imu_nodes,
-                        &#34;use_acc&#34;: self.cfg.dataset.use_acc,
-                        &#34;use_gyro&#34;: self.cfg.dataset.use_gyro,
-                        &#34;use_quat&#34;: self.cfg.dataset.use_quat,
                         &#34;window&#34;: self.cfg.train.window,
                         &#34;debug&#34;: self.cfg.debug,
                     }
@@ -101,7 +97,6 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
 
     def _init_datasets(
         self,
-        rootdir: Path,
         user_session: Tuple[int, int],
         kwargs: Dict,
     ) -&gt; Dict[str, torch.utils.data.Dataset]:
@@ -116,35 +111,36 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
             Dict[str, torch.utils.data.Dataset]: dataset objects
         &#34;&#34;&#34;
         datasets = dict()
-        for user_id, session_id in user_session:
-            key = f&#34;U{user_id:0=4}-S{session_id:0=4}&#34;
+        for user, session in user_session:
+            key = f&#34;{user}-{session}&#34;
             datasets[key] = self.dataset_class(
-                rootdir, [(user_id, session_id)], **kwargs)
+                copy.deepcopy(self.cfg), [(user, session)], **kwargs)
         return datasets
 
     def setup(self, stage: Optional[str] = None) -&gt; None:
-        rootdir = Path(self.cfg.dataset.volume.rootdir)
         split = self.cfg.dataset.split
         kwargs = self.get_kwargs_for_datasets()
 
         if stage in (None, &#34;fit&#34;):
-            self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
+            self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
         else:
             self.op_train = None
 
         if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
-            self.op_val = self._init_datasets(rootdir, split.val, kwargs)
+            self.op_val = self._init_datasets(split.val, kwargs)
         else:
             self.op_val = None
 
         if stage in (None, &#34;test&#34;):
-            self.op_test = self._init_datasets(rootdir, split.test, kwargs)
+            self.op_test = self._init_datasets(split.test, kwargs)
         else:
             self.op_test = None
 
         if stage in (None, &#34;submission&#34;):
-            self.op_submission = self._init_datasets(
-                rootdir, split.submission, kwargs)
+            kwargs.update({&#34;submission&#34;: True})
+            self.op_submission = self._init_datasets(split.submission, kwargs)
+        elif stage == &#34;test-on-submission&#34;:
+            self.op_submission = self._init_datasets(split.submission, kwargs)
         else:
             self.op_submission = None
 
@@ -266,10 +262,6 @@ be included in this object.</dd>
 
                 def get_kwargs_for_datasets(self) -&gt; Dict:
                     kwargs = {
-                        &#34;imu_nodes&#34;: self.cfg.dataset.imu_nodes,
-                        &#34;use_acc&#34;: self.cfg.dataset.use_acc,
-                        &#34;use_gyro&#34;: self.cfg.dataset.use_gyro,
-                        &#34;use_quat&#34;: self.cfg.dataset.use_quat,
                         &#34;window&#34;: self.cfg.train.window,
                         &#34;debug&#34;: self.cfg.debug,
                     }
@@ -282,7 +274,6 @@ be included in this object.</dd>
 
     def _init_datasets(
         self,
-        rootdir: Path,
         user_session: Tuple[int, int],
         kwargs: Dict,
     ) -&gt; Dict[str, torch.utils.data.Dataset]:
@@ -297,35 +288,36 @@ be included in this object.</dd>
             Dict[str, torch.utils.data.Dataset]: dataset objects
         &#34;&#34;&#34;
         datasets = dict()
-        for user_id, session_id in user_session:
-            key = f&#34;U{user_id:0=4}-S{session_id:0=4}&#34;
+        for user, session in user_session:
+            key = f&#34;{user}-{session}&#34;
             datasets[key] = self.dataset_class(
-                rootdir, [(user_id, session_id)], **kwargs)
+                copy.deepcopy(self.cfg), [(user, session)], **kwargs)
         return datasets
 
     def setup(self, stage: Optional[str] = None) -&gt; None:
-        rootdir = Path(self.cfg.dataset.volume.rootdir)
         split = self.cfg.dataset.split
         kwargs = self.get_kwargs_for_datasets()
 
         if stage in (None, &#34;fit&#34;):
-            self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
+            self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
         else:
             self.op_train = None
 
         if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
-            self.op_val = self._init_datasets(rootdir, split.val, kwargs)
+            self.op_val = self._init_datasets(split.val, kwargs)
         else:
             self.op_val = None
 
         if stage in (None, &#34;test&#34;):
-            self.op_test = self._init_datasets(rootdir, split.test, kwargs)
+            self.op_test = self._init_datasets(split.test, kwargs)
         else:
             self.op_test = None
 
         if stage in (None, &#34;submission&#34;):
-            self.op_submission = self._init_datasets(
-                rootdir, split.submission, kwargs)
+            kwargs.update({&#34;submission&#34;: True})
+            self.op_submission = self._init_datasets(split.submission, kwargs)
+        elif stage == &#34;test-on-submission&#34;:
+            self.op_submission = self._init_datasets(split.submission, kwargs)
         else:
             self.op_submission = None
 
@@ -402,10 +394,6 @@ be included in this object.</dd>
 <p>::</p>
 <pre><code>def get_kwargs_for_datasets(self) -&gt; Dict:
     kwargs = {
-        "imu_nodes": self.cfg.dataset.imu_nodes,
-        "use_acc": self.cfg.dataset.use_acc,
-        "use_gyro": self.cfg.dataset.use_gyro,
-        "use_quat": self.cfg.dataset.use_quat,
         "window": self.cfg.train.window,
         "debug": self.cfg.debug,
     }
@@ -426,10 +414,6 @@ be included in this object.</dd>
 
             def get_kwargs_for_datasets(self) -&gt; Dict:
                 kwargs = {
-                    &#34;imu_nodes&#34;: self.cfg.dataset.imu_nodes,
-                    &#34;use_acc&#34;: self.cfg.dataset.use_acc,
-                    &#34;use_gyro&#34;: self.cfg.dataset.use_gyro,
-                    &#34;use_quat&#34;: self.cfg.dataset.use_quat,
                     &#34;window&#34;: self.cfg.train.window,
                     &#34;debug&#34;: self.cfg.debug,
                 }
@@ -474,28 +458,29 @@ when using DDP.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def setup(self, stage: Optional[str] = None) -&gt; None:
-    rootdir = Path(self.cfg.dataset.volume.rootdir)
     split = self.cfg.dataset.split
     kwargs = self.get_kwargs_for_datasets()
 
     if stage in (None, &#34;fit&#34;):
-        self.op_train = self.dataset_class(rootdir, split.train, **kwargs)
+        self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
     else:
         self.op_train = None
 
     if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
-        self.op_val = self._init_datasets(rootdir, split.val, kwargs)
+        self.op_val = self._init_datasets(split.val, kwargs)
     else:
         self.op_val = None
 
     if stage in (None, &#34;test&#34;):
-        self.op_test = self._init_datasets(rootdir, split.test, kwargs)
+        self.op_test = self._init_datasets(split.test, kwargs)
     else:
         self.op_test = None
 
     if stage in (None, &#34;submission&#34;):
-        self.op_submission = self._init_datasets(
-            rootdir, split.submission, kwargs)
+        kwargs.update({&#34;submission&#34;: True})
+        self.op_submission = self._init_datasets(split.submission, kwargs)
+    elif stage == &#34;test-on-submission&#34;:
+        self.op_submission = self._init_datasets(split.submission, kwargs)
     else:
         self.op_submission = None
 
