@@ -113,7 +113,7 @@ class OpenPackImu(torch.utils.data.Dataset):
     def load_dataset(
         self,
         rootdir: Path,
-        user_session: Tuple[Tuple[str, str], ...],
+        user_session: Tuple[Tuple[int, int], ...],
         imu_nodes: Tuple[str, ...],
         window: int = None,
         use_acc: bool = True,
@@ -125,7 +125,7 @@ class OpenPackImu(torch.utils.data.Dataset):
 
         Args:
             rootdir (Path): _description_
-            user_session (Tuple[Tuple[str, str], ...]): _description_
+            user_session (Tuple[Tuple[int, int], ...]): _description_
             imu_nodes (Tuple[str, ...]): _description_
             window (int, optional): _description_. Defaults to None.
             use_acc (bool, optional): _description_. Defaults to True.
@@ -136,7 +136,7 @@ class OpenPackImu(torch.utils.data.Dataset):
         data, index = [], []
         for seq_idx, (user, session) in enumerate(user_session):
             paths_imu = tuple([Path(
-                rootdir, user, &#34;atr&#34;, node, f&#34;{session}.csv&#34;,
+                rootdir, f&#34;U{user:0=4}&#34;, f&#34;{node}&#34;, f&#34;S{session:0=4}.csv&#34;,
             ) for node in imu_nodes])
             ts_sess, x_sess = optk.data.load_imu(
                 paths_imu, use_acc=use_acc, use_gyro=use_gyro, use_quat=use_quat)
@@ -147,11 +147,11 @@ class OpenPackImu(torch.utils.data.Dataset):
             else:
                 path_annot = Path(
                     rootdir,
-                    user,
-                    &#34;annotation/openpack-operations&#34;,
-                    f&#34;{session}.csv&#34;,
+                    f&#34;U{user:0=4}&#34;,
+                    &#34;annotation/work-process&#34;,
+                    f&#34;S{session:0=4}.csv&#34;,
                 )
-                df_label = optk.data.load_and_resample_operation_labels(
+                df_label = optk.data.load_annotation(
                     path_annot, ts_sess, classes=self.classes)
                 label = df_label[&#34;act_idx&#34;].values
 
@@ -298,10 +298,10 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
         for seq_idx, (user, session) in enumerate(user_session):
             path_skeleton = Path(
                 rootdir,
-                user,
-                &#34;kinect/2d-kpt&#34;,  # FIXME: replace this hard-coded value
+                f&#34;U{user:0=4}&#34;,
+                &#34;pose/&#34;,
                 keypoint_type,
-                f&#34;{session}.json&#34;,
+                f&#34;S{session:0=4}.json&#34;,
             )
             ts_sess, x_sess = optk.data.load_keypoints(path_skeleton)
             x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
@@ -312,11 +312,11 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
             else:
                 path_annot = Path(
                     rootdir,
-                    user,
-                    &#34;annotation/openpack-operations&#34;,
-                    f&#34;{session}.csv&#34;,
+                    f&#34;U{user:0=4}&#34;,
+                    &#34;annotation/work-process&#34;,
+                    f&#34;S{session:0=4}.csv&#34;,
                 )
-                df_label = optk.data.load_and_resample_operation_labels(
+                df_label = optk.data.load_annotation(
                     path_annot, ts_sess, classes=self.classes)
                 label = df_label[&#34;act_idx&#34;].values
 
@@ -411,7 +411,7 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
 <dl>
 <dt id="openpack_torch.data.datasets.OpenPackImu"><code class="flex name class">
 <span>class <span class="ident">OpenPackImu</span></span>
-<span>(</span><span>rootdir: pathlib.Path, user_session: Tuple[Tuple[int, int], ...], imu_nodes: Tuple[str] = None, use_acc: bool = True, use_gyro: bool = False, use_quat: bool = False, debug: bool = False, window: int = 1800, submission: bool = False, classes: openpack_toolkit.activity.ActSet = ActSet(classes=(ActClass(id=100, name='Picking', is_ignore=False), ActClass(id=200, name='RelocateItemLabel', is_ignore=False), ActClass(id=300, name='AssembleBox', is_ignore=False), ActClass(id=400, name='InsertItems', is_ignore=False), ActClass(id=500, name='CloseBox', is_ignore=False), ActClass(id=600, name='AttachBoxLabel', is_ignore=False), ActClass(id=700, name='ScanLabel', is_ignore=False), ActClass(id=800, name='AttachShippingLabel', is_ignore=False), ActClass(id=900, name='PutOnRack', is_ignore=False), ActClass(id=1000, name='Fill-outOrder', is_ignore=False), ActClass(id=8100, name='Null', is_ignore=True))))</span>
+<span>(</span><span>rootdir: pathlib.Path, user_session: Tuple[Tuple[int, int], ...], imu_nodes: Tuple[str] = None, use_acc: bool = True, use_gyro: bool = False, use_quat: bool = False, debug: bool = False, window: int = 1800, submission: bool = False, classes: openpack_toolkit.activity.ActSet = ActSet(classes=(ActClass(id=100, name='Picking', is_ignore=False), ActClass(id=200, name='MoveItemLabel', is_ignore=False), ActClass(id=300, name='AssembleBox', is_ignore=False), ActClass(id=400, name='PackInBox', is_ignore=False), ActClass(id=500, name='CloseBox', is_ignore=False), ActClass(id=600, name='ReadLabel', is_ignore=False), ActClass(id=700, name='AttachLabel', is_ignore=False), ActClass(id=800, name='PutOnCartRack', is_ignore=False), ActClass(id=900, name='Pen', is_ignore=False), ActClass(id=1000, name='Null', is_ignore=True))))</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Dataset class for IMU data.</p>
@@ -538,7 +538,7 @@ Defaults to OPENPACK_OPERATION_CLASSES.</dd>
     def load_dataset(
         self,
         rootdir: Path,
-        user_session: Tuple[Tuple[str, str], ...],
+        user_session: Tuple[Tuple[int, int], ...],
         imu_nodes: Tuple[str, ...],
         window: int = None,
         use_acc: bool = True,
@@ -550,7 +550,7 @@ Defaults to OPENPACK_OPERATION_CLASSES.</dd>
 
         Args:
             rootdir (Path): _description_
-            user_session (Tuple[Tuple[str, str], ...]): _description_
+            user_session (Tuple[Tuple[int, int], ...]): _description_
             imu_nodes (Tuple[str, ...]): _description_
             window (int, optional): _description_. Defaults to None.
             use_acc (bool, optional): _description_. Defaults to True.
@@ -561,7 +561,7 @@ Defaults to OPENPACK_OPERATION_CLASSES.</dd>
         data, index = [], []
         for seq_idx, (user, session) in enumerate(user_session):
             paths_imu = tuple([Path(
-                rootdir, user, &#34;atr&#34;, node, f&#34;{session}.csv&#34;,
+                rootdir, f&#34;U{user:0=4}&#34;, f&#34;{node}&#34;, f&#34;S{session:0=4}.csv&#34;,
             ) for node in imu_nodes])
             ts_sess, x_sess = optk.data.load_imu(
                 paths_imu, use_acc=use_acc, use_gyro=use_gyro, use_quat=use_quat)
@@ -572,11 +572,11 @@ Defaults to OPENPACK_OPERATION_CLASSES.</dd>
             else:
                 path_annot = Path(
                     rootdir,
-                    user,
-                    &#34;annotation/openpack-operations&#34;,
-                    f&#34;{session}.csv&#34;,
+                    f&#34;U{user:0=4}&#34;,
+                    &#34;annotation/work-process&#34;,
+                    f&#34;S{session:0=4}.csv&#34;,
                 )
-                df_label = optk.data.load_and_resample_operation_labels(
+                df_label = optk.data.load_annotation(
                     path_annot, ts_sess, classes=self.classes)
                 label = df_label[&#34;act_idx&#34;].values
 
@@ -699,7 +699,7 @@ def num_classes(self) -&gt; int:
 <h3>Methods</h3>
 <dl>
 <dt id="openpack_torch.data.datasets.OpenPackImu.load_dataset"><code class="name flex">
-<span>def <span class="ident">load_dataset</span></span>(<span>self, rootdir: pathlib.Path, user_session: Tuple[Tuple[str, str], ...], imu_nodes: Tuple[str, ...], window: int = None, use_acc: bool = True, use_gyro: bool = False, use_quat: bool = False, submission: bool = False) ‑> None</span>
+<span>def <span class="ident">load_dataset</span></span>(<span>self, rootdir: pathlib.Path, user_session: Tuple[Tuple[int, int], ...], imu_nodes: Tuple[str, ...], window: int = None, use_acc: bool = True, use_gyro: bool = False, use_quat: bool = False, submission: bool = False) ‑> None</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Called in <code>__init__()</code> and load required data.</p>
@@ -707,7 +707,7 @@ def num_classes(self) -&gt; int:
 <dl>
 <dt><strong><code>rootdir</code></strong> :&ensp;<code>Path</code></dt>
 <dd><em>description</em></dd>
-<dt><strong><code>user_session</code></strong> :&ensp;<code>Tuple[Tuple[str, str], &hellip;]</code></dt>
+<dt><strong><code>user_session</code></strong> :&ensp;<code>Tuple[Tuple[int, int], &hellip;]</code></dt>
 <dd><em>description</em></dd>
 <dt><strong><code>imu_nodes</code></strong> :&ensp;<code>Tuple[str, &hellip;]</code></dt>
 <dd><em>description</em></dd>
@@ -729,7 +729,7 @@ def num_classes(self) -&gt; int:
 <pre><code class="python">def load_dataset(
     self,
     rootdir: Path,
-    user_session: Tuple[Tuple[str, str], ...],
+    user_session: Tuple[Tuple[int, int], ...],
     imu_nodes: Tuple[str, ...],
     window: int = None,
     use_acc: bool = True,
@@ -741,7 +741,7 @@ def num_classes(self) -&gt; int:
 
     Args:
         rootdir (Path): _description_
-        user_session (Tuple[Tuple[str, str], ...]): _description_
+        user_session (Tuple[Tuple[int, int], ...]): _description_
         imu_nodes (Tuple[str, ...]): _description_
         window (int, optional): _description_. Defaults to None.
         use_acc (bool, optional): _description_. Defaults to True.
@@ -752,7 +752,7 @@ def num_classes(self) -&gt; int:
     data, index = [], []
     for seq_idx, (user, session) in enumerate(user_session):
         paths_imu = tuple([Path(
-            rootdir, user, &#34;atr&#34;, node, f&#34;{session}.csv&#34;,
+            rootdir, f&#34;U{user:0=4}&#34;, f&#34;{node}&#34;, f&#34;S{session:0=4}.csv&#34;,
         ) for node in imu_nodes])
         ts_sess, x_sess = optk.data.load_imu(
             paths_imu, use_acc=use_acc, use_gyro=use_gyro, use_quat=use_quat)
@@ -763,11 +763,11 @@ def num_classes(self) -&gt; int:
         else:
             path_annot = Path(
                 rootdir,
-                user,
-                &#34;annotation/openpack-operations&#34;,
-                f&#34;{session}.csv&#34;,
+                f&#34;U{user:0=4}&#34;,
+                &#34;annotation/work-process&#34;,
+                f&#34;S{session:0=4}.csv&#34;,
             )
-            df_label = optk.data.load_and_resample_operation_labels(
+            df_label = optk.data.load_annotation(
                 path_annot, ts_sess, classes=self.classes)
             label = df_label[&#34;act_idx&#34;].values
 
@@ -805,7 +805,7 @@ def num_classes(self) -&gt; int:
 </dd>
 <dt id="openpack_torch.data.datasets.OpenPackKeypoint"><code class="flex name class">
 <span>class <span class="ident">OpenPackKeypoint</span></span>
-<span>(</span><span>rootdir: pathlib.Path, user_session: Tuple[Tuple[int, int], ...], keypoint_type: str = None, debug: bool = False, window: int = 900, submission: bool = False, classes: openpack_toolkit.activity.ActSet = ActSet(classes=(ActClass(id=100, name='Picking', is_ignore=False), ActClass(id=200, name='RelocateItemLabel', is_ignore=False), ActClass(id=300, name='AssembleBox', is_ignore=False), ActClass(id=400, name='InsertItems', is_ignore=False), ActClass(id=500, name='CloseBox', is_ignore=False), ActClass(id=600, name='AttachBoxLabel', is_ignore=False), ActClass(id=700, name='ScanLabel', is_ignore=False), ActClass(id=800, name='AttachShippingLabel', is_ignore=False), ActClass(id=900, name='PutOnRack', is_ignore=False), ActClass(id=1000, name='Fill-outOrder', is_ignore=False), ActClass(id=8100, name='Null', is_ignore=True))))</span>
+<span>(</span><span>rootdir: pathlib.Path, user_session: Tuple[Tuple[int, int], ...], keypoint_type: str = None, debug: bool = False, window: int = 900, submission: bool = False, classes: openpack_toolkit.activity.ActSet = ActSet(classes=(ActClass(id=100, name='Picking', is_ignore=False), ActClass(id=200, name='MoveItemLabel', is_ignore=False), ActClass(id=300, name='AssembleBox', is_ignore=False), ActClass(id=400, name='PackInBox', is_ignore=False), ActClass(id=500, name='CloseBox', is_ignore=False), ActClass(id=600, name='ReadLabel', is_ignore=False), ActClass(id=700, name='AttachLabel', is_ignore=False), ActClass(id=800, name='PutOnCartRack', is_ignore=False), ActClass(id=900, name='Pen', is_ignore=False), ActClass(id=1000, name='Null', is_ignore=True))))</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Dataset Class for Keypoint Data.</p>
@@ -911,10 +911,10 @@ Defaults to OPENPACK_OPERATION_CLASSES.</dd>
         for seq_idx, (user, session) in enumerate(user_session):
             path_skeleton = Path(
                 rootdir,
-                user,
-                &#34;kinect/2d-kpt&#34;,  # FIXME: replace this hard-coded value
+                f&#34;U{user:0=4}&#34;,
+                &#34;pose/&#34;,
                 keypoint_type,
-                f&#34;{session}.json&#34;,
+                f&#34;S{session:0=4}.json&#34;,
             )
             ts_sess, x_sess = optk.data.load_keypoints(path_skeleton)
             x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
@@ -925,11 +925,11 @@ Defaults to OPENPACK_OPERATION_CLASSES.</dd>
             else:
                 path_annot = Path(
                     rootdir,
-                    user,
-                    &#34;annotation/openpack-operations&#34;,
-                    f&#34;{session}.csv&#34;,
+                    f&#34;U{user:0=4}&#34;,
+                    &#34;annotation/work-process&#34;,
+                    f&#34;S{session:0=4}.csv&#34;,
                 )
-                df_label = optk.data.load_and_resample_operation_labels(
+                df_label = optk.data.load_annotation(
                     path_annot, ts_sess, classes=self.classes)
                 label = df_label[&#34;act_idx&#34;].values
 
@@ -1065,10 +1065,10 @@ def num_classes(self) -&gt; int:
     for seq_idx, (user, session) in enumerate(user_session):
         path_skeleton = Path(
             rootdir,
-            user,
-            &#34;kinect/2d-kpt&#34;,  # FIXME: replace this hard-coded value
+            f&#34;U{user:0=4}&#34;,
+            &#34;pose/&#34;,
             keypoint_type,
-            f&#34;{session}.json&#34;,
+            f&#34;S{session:0=4}.json&#34;,
         )
         ts_sess, x_sess = optk.data.load_keypoints(path_skeleton)
         x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
@@ -1079,11 +1079,11 @@ def num_classes(self) -&gt; int:
         else:
             path_annot = Path(
                 rootdir,
-                user,
-                &#34;annotation/openpack-operations&#34;,
-                f&#34;{session}.csv&#34;,
+                f&#34;U{user:0=4}&#34;,
+                &#34;annotation/work-process&#34;,
+                f&#34;S{session:0=4}.csv&#34;,
             )
-            df_label = optk.data.load_and_resample_operation_labels(
+            df_label = optk.data.load_annotation(
                 path_annot, ts_sess, classes=self.classes)
             label = df_label[&#34;act_idx&#34;].values
 

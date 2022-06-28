@@ -111,21 +111,10 @@ class BaseLightningModule(pl.LightningModule):
                 log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
         self.log[&#34;train&#34;].append(log)
 
-    def validation_step(
-            self,
-            batch: Dict,
-            batch_idx: int,
-            dataloader_idx: int = 0) -&gt; Dict:
+    def validation_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         return self.training_step(batch, batch_idx)
 
     def validation_epoch_end(self, outputs):
-        if isinstance(outputs[0], list):
-            # When multiple dataloader is used.
-            _outputs = []
-            for out in outputs:
-                _outputs += out
-            outputs = _outputs
-
         log = dict()
         for key in self.log_keys:
             vals = [x[key] for x in outputs if key in x.keys()]
@@ -262,21 +251,10 @@ class BaseLightningModule(pl.LightningModule):
                 log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
         self.log[&#34;train&#34;].append(log)
 
-    def validation_step(
-            self,
-            batch: Dict,
-            batch_idx: int,
-            dataloader_idx: int = 0) -&gt; Dict:
+    def validation_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         return self.training_step(batch, batch_idx)
 
     def validation_epoch_end(self, outputs):
-        if isinstance(outputs[0], list):
-            # When multiple dataloader is used.
-            _outputs = []
-            for out in outputs:
-                _outputs += out
-            outputs = _outputs
-
         log = dict()
         for key in self.log_keys:
             vals = [x[key] for x in outputs if key in x.keys()]
@@ -950,13 +928,6 @@ each validation step for that dataloader.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def validation_epoch_end(self, outputs):
-    if isinstance(outputs[0], list):
-        # When multiple dataloader is used.
-        _outputs = []
-        for out in outputs:
-            _outputs += out
-        outputs = _outputs
-
     log = dict()
     for key in self.log_keys:
         vals = [x[key] for x in outputs if key in x.keys()]
@@ -969,7 +940,7 @@ each validation step for that dataloader.</p>
 </details>
 </dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.validation_step"><code class="name flex">
-<span>def <span class="ident">validation_step</span></span>(<span>self, batch: Dict, batch_idx: int, dataloader_idx: int = 0) ‑> Dict</span>
+<span>def <span class="ident">validation_step</span></span>(<span>self, batch: Dict, batch_idx: int) ‑> Dict</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Operates on a single batch of data from the validation set.
@@ -1057,11 +1028,7 @@ the model goes back to training mode and gradients are enabled.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def validation_step(
-        self,
-        batch: Dict,
-        batch_idx: int,
-        dataloader_idx: int = 0) -&gt; Dict:
+<pre><code class="python">def validation_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
     return self.training_step(batch, batch_idx)</code></pre>
 </details>
 </dd>
