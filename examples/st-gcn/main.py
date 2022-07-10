@@ -17,6 +17,7 @@ from openpack_toolkit.codalab.operation_segmentation import (
 
 logger = getLogger(__name__)
 optorch.configs.register_configs()
+optorch.utils.reset_seed(seed=0)
 
 # ----------------------------------------------------------------------
 

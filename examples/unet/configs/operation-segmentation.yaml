@@ -28,7 +28,7 @@ train:
     epochs: 5
 path:
   openpack:
-    version: v0.2.0
+    version: v0.2.1
     rootdir: ${datarootdir}/datasets/openpack/${.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}

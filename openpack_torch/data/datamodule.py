@@ -35,15 +35,17 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         super().__init__()
         self.cfg = cfg
 
+        self.debug = cfg.debug
         if cfg.debug:
-            self.debug = True
             self.batch_size = cfg.train.debug.batch_size
         else:
-            self.debug = True
             self.batch_size = cfg.train.batch_size
 
-    def get_kwargs_for_datasets(self) -> Dict:
+    def get_kwargs_for_datasets(self, stage: Optional[str] = None) -> Dict:
         """Build a kwargs to initialize dataset class. This method is called in ``setup()``.
+
+        Args:
+            stage (str, optional): dataset type. {train, validate, test, submission}.
 
         Example:
 
@@ -85,27 +87,31 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None) -> None:
         split = self.cfg.dataset.split
-        kwargs = self.get_kwargs_for_datasets()
 
         if stage in (None, "fit"):
+            kwargs = self.get_kwargs_for_datasets(stage="train")
             self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
         else:
             self.op_train = None
 
         if stage in (None, "fit", "validate"):
+            kwargs = self.get_kwargs_for_datasets(stage="validate")
             self.op_val = self._init_datasets(split.val, kwargs)
         else:
             self.op_val = None
 
         if stage in (None, "test"):
+            kwargs = self.get_kwargs_for_datasets(stage="test")
             self.op_test = self._init_datasets(split.test, kwargs)
         else:
             self.op_test = None
 
         if stage in (None, "submission"):
+            kwargs = self.get_kwargs_for_datasets(stage="submission")
             kwargs.update({"submission": True})
             self.op_submission = self._init_datasets(split.submission, kwargs)
         elif stage == "test-on-submission":
+            kwargs = self.get_kwargs_for_datasets(stage="submission")
             self.op_submission = self._init_datasets(split.submission, kwargs)
         else:
             self.op_submission = None
