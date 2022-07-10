@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openpack-torch"
-version = "0.4.0"
+version = "0.4.1"
 description = "PyTorch extention to work around with OpenPack dataset"
 authors = ["Yoshimura Naoya <yoshimura.naoya@ist.osaka-u.ac.jp>"]
 license = "MIT"
