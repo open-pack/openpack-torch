@@ -46,8 +46,7 @@ poetry add  openpack-torch
 |--------------------------|---------------|---------------------|------------|------|
 | UNet                     | 0.3451        | 0.3747              | 2022-06-28 | [main.py](./examples/unet/main.py) |
 | DeepConvLSTM             | 0.7081        | 0.7695              | 2022-06-28 | [main.py](./examples/deep-conv-lstm/main.py) |
-| DeepConvLSTM + Self-Attn | 0.8161        | 0.8409              | 2022-06-28 | [main.py](./examples/deep-conv-lstm/main_self_attention.py) |
-| ST-GCN                   | -             | -                   |            |      |
+| ST-GCN                   | 0.7024        | 0.6106              | 2022-07-07 | [main.py](./examples/st-gcn/main.py) |
 
 NOTE: F1 = F1-measure (macro average)
 

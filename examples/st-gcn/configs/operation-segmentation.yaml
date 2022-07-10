@@ -2,7 +2,7 @@ defaults:
   - dataset: openpack-2d-kpt
   - override hydra/job_logging: custom
   - _self_
-datarootdir: /home/bob/data
+datarootdir: /content/data
 issue: "I01-EXP1-V1"
 hydra:
   run:
@@ -18,7 +18,7 @@ model:
 train:
   num_workers: 3
   batch_size: 8
-  epochs: 200
+  epochs: 100
   window: 900 # 30Hz * 60s
   optimizer:
     type: "Adam"
@@ -29,7 +29,7 @@ train:
     epochs: 5
 path:
   openpack:
-    version: v0.2.0
+    version: v0.2.1
     rootdir: ${datarootdir}/datasets/openpack/${.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
