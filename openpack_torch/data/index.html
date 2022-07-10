@@ -99,15 +99,17 @@ be included in this object.</dd>
         super().__init__()
         self.cfg = cfg
 
+        self.debug = cfg.debug
         if cfg.debug:
-            self.debug = True
             self.batch_size = cfg.train.debug.batch_size
         else:
-            self.debug = True
             self.batch_size = cfg.train.batch_size
 
-    def get_kwargs_for_datasets(self) -&gt; Dict:
+    def get_kwargs_for_datasets(self, stage: Optional[str] = None) -&gt; Dict:
         &#34;&#34;&#34;Build a kwargs to initialize dataset class. This method is called in ``setup()``.
+
+        Args:
+            stage (str, optional): dataset type. {train, validate, test, submission}.
 
         Example:
 
@@ -149,27 +151,31 @@ be included in this object.</dd>
 
     def setup(self, stage: Optional[str] = None) -&gt; None:
         split = self.cfg.dataset.split
-        kwargs = self.get_kwargs_for_datasets()
 
         if stage in (None, &#34;fit&#34;):
+            kwargs = self.get_kwargs_for_datasets(stage=&#34;train&#34;)
             self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
         else:
             self.op_train = None
 
         if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
+            kwargs = self.get_kwargs_for_datasets(stage=&#34;validate&#34;)
             self.op_val = self._init_datasets(split.val, kwargs)
         else:
             self.op_val = None
 
         if stage in (None, &#34;test&#34;):
+            kwargs = self.get_kwargs_for_datasets(stage=&#34;test&#34;)
             self.op_test = self._init_datasets(split.test, kwargs)
         else:
             self.op_test = None
 
         if stage in (None, &#34;submission&#34;):
+            kwargs = self.get_kwargs_for_datasets(stage=&#34;submission&#34;)
             kwargs.update({&#34;submission&#34;: True})
             self.op_submission = self._init_datasets(split.submission, kwargs)
         elif stage == &#34;test-on-submission&#34;:
+            kwargs = self.get_kwargs_for_datasets(stage=&#34;submission&#34;)
             self.op_submission = self._init_datasets(split.submission, kwargs)
         else:
             self.op_submission = None
@@ -239,10 +245,15 @@ be included in this object.</dd>
 <h3>Methods</h3>
 <dl>
 <dt id="openpack_torch.data.OpenPackBaseDataModule.get_kwargs_for_datasets"><code class="name flex">
-<span>def <span class="ident">get_kwargs_for_datasets</span></span>(<span>self) ‑> Dict</span>
+<span>def <span class="ident">get_kwargs_for_datasets</span></span>(<span>self, stage: Optional[str] = None) ‑> Dict</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Build a kwargs to initialize dataset class. This method is called in <code>setup()</code>.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>stage</code></strong> :&ensp;<code>str</code>, optional</dt>
+<dd>dataset type. {train, validate, test, submission}.</dd>
+</dl>
 <h2 id="example">Example</h2>
 <p>::</p>
 <pre><code>def get_kwargs_for_datasets(self) -&gt; Dict:
@@ -258,8 +269,11 @@ be included in this object.</dd>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def get_kwargs_for_datasets(self) -&gt; Dict:
+<pre><code class="python">def get_kwargs_for_datasets(self, stage: Optional[str] = None) -&gt; Dict:
     &#34;&#34;&#34;Build a kwargs to initialize dataset class. This method is called in ``setup()``.
+
+    Args:
+        stage (str, optional): dataset type. {train, validate, test, submission}.
 
     Example:
 
@@ -312,27 +326,31 @@ when using DDP.</p>
 </summary>
 <pre><code class="python">def setup(self, stage: Optional[str] = None) -&gt; None:
     split = self.cfg.dataset.split
-    kwargs = self.get_kwargs_for_datasets()
 
     if stage in (None, &#34;fit&#34;):
+        kwargs = self.get_kwargs_for_datasets(stage=&#34;train&#34;)
         self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
     else:
         self.op_train = None
 
     if stage in (None, &#34;fit&#34;, &#34;validate&#34;):
+        kwargs = self.get_kwargs_for_datasets(stage=&#34;validate&#34;)
         self.op_val = self._init_datasets(split.val, kwargs)
     else:
         self.op_val = None
 
     if stage in (None, &#34;test&#34;):
+        kwargs = self.get_kwargs_for_datasets(stage=&#34;test&#34;)
         self.op_test = self._init_datasets(split.test, kwargs)
     else:
         self.op_test = None
 
     if stage in (None, &#34;submission&#34;):
+        kwargs = self.get_kwargs_for_datasets(stage=&#34;submission&#34;)
         kwargs.update({&#34;submission&#34;: True})
         self.op_submission = self._init_datasets(split.submission, kwargs)
     elif stage == &#34;test-on-submission&#34;:
+        kwargs = self.get_kwargs_for_datasets(stage=&#34;submission&#34;)
         self.op_submission = self._init_datasets(split.submission, kwargs)
     else:
         self.op_submission = None
