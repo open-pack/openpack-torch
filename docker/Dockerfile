@@ -31,32 +31,16 @@ RUN pip install --upgrade pip
 # Setup Alias
 RUN echo 'alias python=python3' >> ~/.bashrc
 
-# -- Add User (ID: bob, PW: bob) --
-ENV USER bob
-ENV HOME /home/${USER}
-ENV SHELL /bin/bash
-RUN useradd -m ${USER} \
-    && gpasswd -a ${USER} sudo \
-    && echo "${USER}:bob" | chpasswd
-USER ${USER}
-WORKDIR /home/bob
-ENV HARDS_LOG_LEVEL DEBUG
-ENV PATH ${PATH}:/home/bob/.local/bin
-
-# -- Use `sudo` without Password. --
+# -- Setup Working Directory --
 USER root
-COPY ./docker/sudoers /root/sudoers
-RUN apt-get install -y sudo \
-    && cp -f /root/sudoers /etc/sudoers \
-    && usermod -aG sudo bob
-USER bob
-
-# -- Make Working Directory --
-VOLUME [ "/home/bob/openpack-torch", "/home/bob/data" ]
-
+ENV HOME /root
+ENV SHELL /bin/bash
+WORKDIR /content
+ENV PATH ${PATH}:/root/.local/bin
 
 # -- Python Setting --
 RUN echo 'alias python=python3' >> ~/.bashrc
 COPY --from=builder /root/src/requirements.txt .
-RUN pip install -r /home/bob/requirements.txt --no-deps
-RUN pip install jupyterlab
+RUN pip install -r /content/requirements.txt --no-deps
+RUN pip install jupyterlab matplotlib seaborn
+

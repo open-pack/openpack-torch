@@ -4,13 +4,13 @@ services:
     build:
       context: ./
       dockerfile: ./docker/Dockerfile
-    image: openpack-torch:v1.10.1-1
+    image: openpack-torch:v1.10.1-2
     container_name: openpack-torch
-    command: jupyter lab --ip 0.0.0.0 --port 8888 --no-browser
+    command: jupyter lab --ip 0.0.0.0 --port 8888 --no-browser --allow-root
     tty: true
     volumes:
-      - ./:/home/bob/openpack-torch # Code
-      - ../data:/home/bob/data/ # Data Directory
+      - ./:/content/openpack-torch # Code
+      - ../data-tmp:/content/data/ # Data Directory
     ports:
       - "8888:8888"
     shm_size: 8gb
