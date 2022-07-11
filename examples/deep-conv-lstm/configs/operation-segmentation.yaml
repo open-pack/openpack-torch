@@ -2,7 +2,7 @@ defaults:
   - dataset: atr-acc-wrists
   - override hydra/job_logging: custom
   - _self_
-datarootdir: /home/bob/data
+datarootdir: /content/data
 issue: "I01-EXP1-V1"
 hydra:
   run:

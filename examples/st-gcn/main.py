@@ -1,6 +1,6 @@
 from logging import getLogger
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 import hydra
 import numpy as np
@@ -43,7 +43,7 @@ def save_training_results(log: Dict, logdir: Path) -> None:
 class OpenPackKeypointDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackKeypoint
 
-    def get_kwargs_for_datasets(self) -> Dict:
+    def get_kwargs_for_datasets(self, stage: Optional[str] = None) -> Dict:
         submission = True if self.cfg.mode == "submission" else False
 
         kwargs = {
