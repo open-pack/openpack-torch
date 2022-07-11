@@ -1,6 +1,6 @@
 from logging import getLogger
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 import hydra
 import numpy as np
@@ -43,7 +43,7 @@ def save_training_results(log: Dict, logdir: Path) -> None:
 class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackImu
 
-    def get_kwargs_for_datasets(self) -> Dict:
+    def get_kwargs_for_datasets(self, stage: Optional[str] = None) -> Dict:
         kwargs = {
             "window": self.cfg.train.window,
             "debug": self.cfg.debug,
