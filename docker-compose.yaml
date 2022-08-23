@@ -10,7 +10,7 @@ services:
     tty: true
     volumes:
       - ./:/content/openpack-torch # Code
-      - ../data-tmp:/content/data/ # Data Directory
+      - ../data:/content/data/ # Data Directory
     ports:
       - "8888:8888"
     shm_size: 8gb
