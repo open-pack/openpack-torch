@@ -16,13 +16,13 @@ def opcfg():
     cfg = OmegaConf.create({
         "path": {
             "openpack": {
-                "version": "vX.X.X",
+                "version": optk.DATASET_VERSION,
                 "rootdir": str(rootdir),
             }
         },
         "dataset": {
             "stream": None,
-            "annotation": optk.configs.datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+            "annotation": optk.configs.datasets.annotations.ACTIVITY_1S_ANNOTATION,
         }
     })
     return cfg
