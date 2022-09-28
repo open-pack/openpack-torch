@@ -50,6 +50,25 @@ poetry add  openpack-torch
 
 NOTE: F1 = F1-measure (macro average)
 
+##### Split: OpenPack Challenge 2022
+
+This split is defined for OpenPack Challenge 2022.
+
+| Model                    | F1 (Test Set) | F1 (Submission Set) | Date       | Code |
+|--------------------------|---------------|---------------------|------------|------|
+| UNet                     | TBA           | TBA                 | -          | -    |
+| DeepConvLSTM             | TBA           | TBA                 | -          | -    |
+| ST-GCN                   | TBA           | TBA                 | -          | -    |
+
+
+## OpenPack Challenge 2022 @ PerCom2023 WS Bird.
+
+We are hosting an activity recognition competition, using the OpenPack dataset at a [PerCom 2023 Workshop](https://bio-navigation.jp/bird2023/)!
+The task is very simple: Recognize 10 work operations from the OpenPack dataset.
+Please join this exciting opportunity. For more information about the competition, click [here](https://open-pack.github.io/challenge2022).
+
+![OpenPack Challenge Logo](./assets/img/OpenPackCHALLENG-black.png)
+
 ## LICENCE
 
 This software (openpack-torch) is distributed under [MIT Licence](./LICENSE).

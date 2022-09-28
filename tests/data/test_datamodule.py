@@ -15,13 +15,13 @@ def opcfg():
     cfg = OmegaConf.create({
         "path": {
             "openpack": {
-                "version": "vX.X.X",
+                "version": optk.DATASET_VERSION,
                 "rootdir": str(rootdir),
             }
         },
         "dataset": {
             "stream": optk.configs.datasets.streams.ATR_ACC_STREAM,
-            "annotation": optk.configs.datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+            "annotation": optk.configs.datasets.annotations.ACTIVITY_1S_ANNOTATION,
             "split": {
                 "name": "unit-test",
                 "train": [("U0102", "S0500")],
