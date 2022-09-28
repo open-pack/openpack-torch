@@ -41,7 +41,7 @@ logger = getLogger(__name__)
 
 
 class BaseLightningModule(pl.LightningModule):
-    log: Dict[str, List] = {&#34;train&#34;: [], &#34;val&#34;: [], &#34;test&#34;: []}
+    log_dict: Dict[str, List] = {&#34;train&#34;: [], &#34;val&#34;: [], &#34;test&#34;: []}
     log_keys: Tuple[str, ...] = (&#34;loss&#34;, &#34;acc&#34;)
 
     def __init__(self, cfg: DictConfig = None) -&gt; None:
@@ -109,7 +109,7 @@ class BaseLightningModule(pl.LightningModule):
             vals = [x[key] for x in outputs if key in x.keys()]
             if len(vals) &gt; 0:
                 log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
-        self.log[&#34;train&#34;].append(log)
+        self.log_dict[&#34;train&#34;].append(log)
 
     def validation_step(
             self,
@@ -132,9 +132,19 @@ class BaseLightningModule(pl.LightningModule):
             if len(vals) &gt; 0:
                 avg = torch.stack(vals).mean().item()
                 log[f&#34;val/{key}&#34;] = avg
-        self.log[&#34;val&#34;].append(log)
+        self.log_dict[&#34;val&#34;].append(log)
 
         self.print_latest_metrics()
+
+        if len(self.log_dict[&#34;val&#34;]) &gt; 0:
+            val_loss = self.log_dict[&#34;val&#34;][-1].get(&#34;val/loss&#34;, None)
+            self.log(
+                &#34;val/loss&#34;,
+                val_loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+                logger=True)
 
     def test_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         raise NotImplementedError()
@@ -153,9 +163,10 @@ class BaseLightningModule(pl.LightningModule):
 
     def print_latest_metrics(self) -&gt; None:
         # -- Logging --
-        train_log = self.log[&#34;train&#34;][-1] if len(
-            self.log[&#34;train&#34;]) &gt; 0 else dict()
-        val_log = self.log[&#34;val&#34;][-1] if len(self.log[&#34;val&#34;]) &gt; 0 else dict()
+        train_log = self.log_dict[&#34;train&#34;][-1] if len(
+            self.log_dict[&#34;train&#34;]) &gt; 0 else dict()
+        val_log = self.log_dict[&#34;val&#34;][-1] if len(
+            self.log_dict[&#34;val&#34;]) &gt; 0 else dict()
         log_template = (
             &#34;Epoch[{epoch:0=3}]&#34;
             &#34; TRAIN: loss={train_loss:&gt;7.4f}, acc={train_acc:&gt;7.4f}&#34;
@@ -192,7 +203,7 @@ class BaseLightningModule(pl.LightningModule):
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class BaseLightningModule(pl.LightningModule):
-    log: Dict[str, List] = {&#34;train&#34;: [], &#34;val&#34;: [], &#34;test&#34;: []}
+    log_dict: Dict[str, List] = {&#34;train&#34;: [], &#34;val&#34;: [], &#34;test&#34;: []}
     log_keys: Tuple[str, ...] = (&#34;loss&#34;, &#34;acc&#34;)
 
     def __init__(self, cfg: DictConfig = None) -&gt; None:
@@ -260,7 +271,7 @@ class BaseLightningModule(pl.LightningModule):
             vals = [x[key] for x in outputs if key in x.keys()]
             if len(vals) &gt; 0:
                 log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
-        self.log[&#34;train&#34;].append(log)
+        self.log_dict[&#34;train&#34;].append(log)
 
     def validation_step(
             self,
@@ -283,9 +294,19 @@ class BaseLightningModule(pl.LightningModule):
             if len(vals) &gt; 0:
                 avg = torch.stack(vals).mean().item()
                 log[f&#34;val/{key}&#34;] = avg
-        self.log[&#34;val&#34;].append(log)
+        self.log_dict[&#34;val&#34;].append(log)
 
         self.print_latest_metrics()
+
+        if len(self.log_dict[&#34;val&#34;]) &gt; 0:
+            val_loss = self.log_dict[&#34;val&#34;][-1].get(&#34;val/loss&#34;, None)
+            self.log(
+                &#34;val/loss&#34;,
+                val_loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+                logger=True)
 
     def test_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         raise NotImplementedError()
@@ -304,9 +325,10 @@ class BaseLightningModule(pl.LightningModule):
 
     def print_latest_metrics(self) -&gt; None:
         # -- Logging --
-        train_log = self.log[&#34;train&#34;][-1] if len(
-            self.log[&#34;train&#34;]) &gt; 0 else dict()
-        val_log = self.log[&#34;val&#34;][-1] if len(self.log[&#34;val&#34;]) &gt; 0 else dict()
+        train_log = self.log_dict[&#34;train&#34;][-1] if len(
+            self.log_dict[&#34;train&#34;]) &gt; 0 else dict()
+        val_log = self.log_dict[&#34;val&#34;][-1] if len(
+            self.log_dict[&#34;val&#34;]) &gt; 0 else dict()
         log_template = (
             &#34;Epoch[{epoch:0=3}]&#34;
             &#34; TRAIN: loss={train_loss:&gt;7.4f}, acc={train_acc:&gt;7.4f}&#34;
@@ -324,7 +346,7 @@ class BaseLightningModule(pl.LightningModule):
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
-<li>pytorch_lightning.core.lightning.LightningModule</li>
+<li>pytorch_lightning.core.module.LightningModule</li>
 <li>pytorch_lightning.core.mixins.device_dtype_mixin.DeviceDtypeModuleMixin</li>
 <li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
 <li>pytorch_lightning.core.saving.ModelIO</li>
@@ -335,7 +357,7 @@ class BaseLightningModule(pl.LightningModule):
 </ul>
 <h3>Class variables</h3>
 <dl>
-<dt id="openpack_torch.lightning.BaseLightningModule.log"><code class="name">var <span class="ident">log</span> : Dict[str, List]</code></dt>
+<dt id="openpack_torch.lightning.BaseLightningModule.log_dict"><code class="name">var <span class="ident">log_dict</span> : Dict[str, List]</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -476,7 +498,7 @@ return (
 )</p>
 </div>
 <p>Metrics can be made available to monitor by simply logging it using
-<code>self.log('metric_to_track', metric_val)</code> in your :class:<code>~pytorch_lightning.core.lightning.LightningModule</code>.</p>
+<code>self.log('metric_to_track', metric_val)</code> in your :class:<code>~pytorch_lightning.core.module.LightningModule</code>.</p>
 <h2 id="note">Note</h2>
 <p>The <code>frequency</code> value specified in a dict along with the <code>optimizer</code> key is an int corresponding
 to the number of sequential batches optimized with the specific optimizer.
@@ -545,7 +567,10 @@ def configure_optimizers(self):
 <h2 id="note_1">Note</h2>
 <p>Some things to know:</p>
 <ul>
-<li>Lightning calls <code>.backward()</code> and <code>.step()</code> on each optimizer and learning rate scheduler as needed.</li>
+<li>Lightning calls <code>.backward()</code> and <code>.step()</code> on each optimizer as needed.</li>
+<li>If learning rate scheduler is specified in <code>configure_optimizers()</code> with key
+<code>"interval"</code> (default "epoch") in the scheduler configuration, Lightning will call
+the scheduler's <code>.step()</code> method automatically in case of automatic optimization.</li>
 <li>If you use 16-bit precision (<code>precision=16</code>), Lightning will automatically handle the optimizers.</li>
 <li>If you use multiple optimizers, :meth:<code>training_step</code> will have an additional <code>optimizer_idx</code> parameter.</li>
 <li>If you use :class:<code>torch.optim.LBFGS</code>, Lightning handles the closure function automatically for you.</li>
@@ -631,9 +656,10 @@ override the :meth:<code>optimizer_step</code> hook.</li>
 </summary>
 <pre><code class="python">def print_latest_metrics(self) -&gt; None:
     # -- Logging --
-    train_log = self.log[&#34;train&#34;][-1] if len(
-        self.log[&#34;train&#34;]) &gt; 0 else dict()
-    val_log = self.log[&#34;val&#34;][-1] if len(self.log[&#34;val&#34;]) &gt; 0 else dict()
+    train_log = self.log_dict[&#34;train&#34;][-1] if len(
+        self.log_dict[&#34;train&#34;]) &gt; 0 else dict()
+    val_log = self.log_dict[&#34;val&#34;][-1] if len(
+        self.log_dict[&#34;val&#34;]) &gt; 0 else dict()
     log_template = (
         &#34;Epoch[{epoch:0=3}]&#34;
         &#34; TRAIN: loss={train_loss:&gt;7.4f}, acc={train_acc:&gt;7.4f}&#34;
@@ -839,7 +865,7 @@ using <code>truncated_bptt_steps &gt; 0</code>, the lists have the dimensions
         vals = [x[key] for x in outputs if key in x.keys()]
         if len(vals) &gt; 0:
             log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
-    self.log[&#34;train&#34;].append(log)</code></pre>
+    self.log_dict[&#34;train&#34;].append(log)</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.training_step"><code class="name flex">
@@ -854,7 +880,7 @@ The output of your :class:<code>~torch.utils.data.DataLoader</code>. A tensor, t
 batch_idx (<code>int</code>): Integer displaying index of this batch
 optimizer_idx (<code>int</code>): When using multiple optimizers, this argument will also be present.
 hiddens (<code>Any</code>): Passed in if
-:paramref:<code>~pytorch_lightning.core.lightning.LightningModule.truncated_bptt_steps</code> &gt; 0.</p>
+:paramref:<code>~pytorch_lightning.core.module.LightningModule.truncated_bptt_steps</code> &gt; 0.</p>
 <h2 id="return">Return</h2>
 <p>Any of.</p>
 <ul>
@@ -963,9 +989,19 @@ each validation step for that dataloader.</p>
         if len(vals) &gt; 0:
             avg = torch.stack(vals).mean().item()
             log[f&#34;val/{key}&#34;] = avg
-    self.log[&#34;val&#34;].append(log)
+    self.log_dict[&#34;val&#34;].append(log)
 
-    self.print_latest_metrics()</code></pre>
+    self.print_latest_metrics()
+
+    if len(self.log_dict[&#34;val&#34;]) &gt; 0:
+        val_loss = self.log_dict[&#34;val&#34;][-1].get(&#34;val/loss&#34;, None)
+        self.log(
+            &#34;val/loss&#34;,
+            val_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True)</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.validation_step"><code class="name flex">
@@ -1091,7 +1127,7 @@ the model goes back to training mode and gradients are enabled.</p></div>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.forward" href="#openpack_torch.lightning.BaseLightningModule.forward">forward</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.init_criterion" href="#openpack_torch.lightning.BaseLightningModule.init_criterion">init_criterion</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.init_model" href="#openpack_torch.lightning.BaseLightningModule.init_model">init_model</a></code></li>
-<li><code><a title="openpack_torch.lightning.BaseLightningModule.log" href="#openpack_torch.lightning.BaseLightningModule.log">log</a></code></li>
+<li><code><a title="openpack_torch.lightning.BaseLightningModule.log_dict" href="#openpack_torch.lightning.BaseLightningModule.log_dict">log_dict</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.log_keys" href="#openpack_torch.lightning.BaseLightningModule.log_keys">log_keys</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.print_latest_metrics" href="#openpack_torch.lightning.BaseLightningModule.print_latest_metrics">print_latest_metrics</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.test_epoch_end" href="#openpack_torch.lightning.BaseLightningModule.test_epoch_end">test_epoch_end</a></code></li>
