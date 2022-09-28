@@ -128,7 +128,7 @@ def train(cfg: DictConfig):
     logger.info("Finish training!")
 
     logger.debug(f"logdir = {logdir}")
-    save_training_results(plmodel.log, logdir)
+    save_training_results(plmodel.log_dict, logdir)
     logger.debug(f"logdir = {logdir}")
 
 
@@ -192,7 +192,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     if mode in ("test", "test-on-submission"):
         # save performance summary
         df_summary = eval_operation_segmentation_wrapper(
-            outputs, OPENPACK_OPERATIONS,
+            cfg, outputs, OPENPACK_OPERATIONS,
         )
         if mode == "test":
             path = Path(cfg.path.logdir.summary.test)
@@ -207,13 +207,16 @@ def test(cfg: DictConfig, mode: str = "test"):
         logger.info(f"df_summary:\n{df_summary}")
     elif mode == "submission":
         # make submission file
+        metadata = {
+            "dataset.split.name": cfg.dataset.split.name,
+        }
         submission_dict = construct_submission_dict(
             outputs, OPENPACK_OPERATIONS)
-        make_submission_zipfile(submission_dict, logdir)
+        make_submission_zipfile(submission_dict, logdir, metadata=metadata)
 
 
 @ hydra.main(version_base=None, config_path="./configs",
-             config_name="operation-segmentation.yaml")
+             config_name="st-gcn.yaml")
 def main(cfg: DictConfig):
     # DEBUG
     if cfg.debug:

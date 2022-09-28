@@ -19,15 +19,23 @@ def register_configs() -> None:
         "dataset/stream": [
             optk.configs.datasets.streams.ATR_ACC_STREAM,
             optk.configs.datasets.streams.ATR_QAGS_STREAM,
+            optk.configs.datasets.streams.E4_ACC_STREAM,
+            optk.configs.datasets.streams.E4_BVP_STREAM,
+            optk.configs.datasets.streams.E4_EDA_STREAM,
+            optk.configs.datasets.streams.E4_TEMP_STREAM,
             optk.configs.datasets.streams.KINECT_2D_KPT_STREAM,
+            optk.configs.datasets.streams.SYSTEM_HT_ORIGINAL_STREAM,
+            optk.configs.datasets.streams.SYSTEM_ORDER_SHEET_STREAM,
         ],
         "dataset/split": [
             optk.configs.datasets.splits.DEBUG_SPLIT,
             optk.configs.datasets.splits.PILOT_CHALLENGE_SPLIT,
+            optk.configs.datasets.splits.OPENPACK_CHALLENGE_2022_SPLIT,
         ],
         "dataset/annotation": [
             optk.configs.datasets.annotations.OPENPACK_ACTIONS_ANNOTATION,
             optk.configs.datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
+            optk.configs.datasets.annotations.ACTIVITY_1S_ANNOTATION,
         ],
         "dataset": [
             OPENPACK_ACC_DATASET_CONFIG, OPENPACK_2D_KEYPOINT_DATASET_CONFIG
@@ -36,3 +44,9 @@ def register_configs() -> None:
     for group, items in data.items():
         for item in items:
             cs.store(group=group, name=item.name, node=item)
+
+    # Activity Set
+    cs.store(group="dataset/classes", name="OPENPACK_OPERATIONS",
+             node=optk.configs.datasets.annotations.OPENPACK_OPERATIONS)
+    cs.store(group="dataset/classes", name="OPENPACK_ACTIONS",
+             node=optk.configs.datasets.annotations.OPENPACK_ACTIONS)

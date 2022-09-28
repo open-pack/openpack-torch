@@ -13,7 +13,7 @@ logger = getLogger(__name__)
 
 
 class BaseLightningModule(pl.LightningModule):
-    log: Dict[str, List] = {"train": [], "val": [], "test": []}
+    log_dict: Dict[str, List] = {"train": [], "val": [], "test": []}
     log_keys: Tuple[str, ...] = ("loss", "acc")
 
     def __init__(self, cfg: DictConfig = None) -> None:
@@ -81,7 +81,7 @@ class BaseLightningModule(pl.LightningModule):
             vals = [x[key] for x in outputs if key in x.keys()]
             if len(vals) > 0:
                 log[f"train/{key}"] = torch.stack(vals).mean().item()
-        self.log["train"].append(log)
+        self.log_dict["train"].append(log)
 
     def validation_step(
             self,
@@ -104,9 +104,19 @@ class BaseLightningModule(pl.LightningModule):
             if len(vals) > 0:
                 avg = torch.stack(vals).mean().item()
                 log[f"val/{key}"] = avg
-        self.log["val"].append(log)
+        self.log_dict["val"].append(log)
 
         self.print_latest_metrics()
+
+        if len(self.log_dict["val"]) > 0:
+            val_loss = self.log_dict["val"][-1].get("val/loss", None)
+            self.log(
+                "val/loss",
+                val_loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+                logger=True)
 
     def test_step(self, batch: Dict, batch_idx: int) -> Dict:
         raise NotImplementedError()
@@ -125,9 +135,10 @@ class BaseLightningModule(pl.LightningModule):
 
     def print_latest_metrics(self) -> None:
         # -- Logging --
-        train_log = self.log["train"][-1] if len(
-            self.log["train"]) > 0 else dict()
-        val_log = self.log["val"][-1] if len(self.log["val"]) > 0 else dict()
+        train_log = self.log_dict["train"][-1] if len(
+            self.log_dict["train"]) > 0 else dict()
+        val_log = self.log_dict["val"][-1] if len(
+            self.log_dict["val"]) > 0 else dict()
         log_template = (
             "Epoch[{epoch:0=3}]"
             " TRAIN: loss={train_loss:>7.4f}, acc={train_acc:>7.4f}"

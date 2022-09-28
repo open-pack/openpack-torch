@@ -1,8 +1,8 @@
 defaults:
-  - dataset: atr-acc-wrists
+  - dataset: atr-left-wrist
   - override hydra/job_logging: custom
   - _self_
-datarootdir: /content/data
+datarootdir: "/content/data/"
 issue: "I01-EXP1-V1"
 hydra:
   run:
@@ -28,12 +28,12 @@ train:
     epochs: 5
 path:
   openpack:
-    version: v0.2.1
+    version: v0.3.0
     rootdir: ${datarootdir}/datasets/openpack/${.version}
   logdir:
     rootdir: ${datarootdir}/log/${dataset.name}/${model.name}/${issue}
     model: ${path.logdir.rootdir}/model.pth
     predict: ${path.logdir.rootdir}/pred/{user}-{session}
-    summary: 
+    summary:
       test: ${path.logdir.rootdir}/summary.csv
       submission: ${path.logdir.rootdir}/summary_submission.csv

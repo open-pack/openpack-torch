@@ -346,3 +346,4 @@ $RECYCLE.BIN/
 
 
 docs/
+docker-compose-dev.yaml

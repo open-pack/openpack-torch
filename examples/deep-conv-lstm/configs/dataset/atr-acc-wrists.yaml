@@ -1,5 +1,0 @@
-defaults:
-  - annotation: openpack-operations
-  - stream: atr-acc-wrists
-  - split: pilot-challenge
-name: "atr-acc-wrists"
