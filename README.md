@@ -60,12 +60,16 @@ This split is defined for OpenPack Challenge 2022.
 | DeepConvLSTM             | TBA           | TBA                 | -          | -    |
 | ST-GCN                   | TBA           | TBA                 | -          | -    |
 
-
-## OpenPack Challenge 2022 @ PerCom2023 WS Bird.
+## OpenPack Challenge 2022 @ PerCom2023 WS Bird
 
 We are hosting an activity recognition competition, using the OpenPack dataset at a [PerCom 2023 Workshop](https://bio-navigation.jp/bird2023/)!
 The task is very simple: Recognize 10 work operations from the OpenPack dataset.
 Please join this exciting opportunity. For more information about the competition, click [here](https://open-pack.github.io/challenge2022).
+
+### Tutorials
+
+- [Train a baseline model and make submission file.](./examples/unet/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/unet/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
+- Change input modalities. (coming soon ...)
 
 ![OpenPack Challenge Logo](./assets/img/OpenPackCHALLENG-black.png)
 
