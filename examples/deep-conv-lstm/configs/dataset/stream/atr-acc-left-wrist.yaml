@@ -4,7 +4,7 @@ defaults:
 name: atr-acc-left-wrist
 super_stream: atr-qags
 devices:
-  - atr01
+  - atr02
 acc: true
 gyro: false
 quat: false
