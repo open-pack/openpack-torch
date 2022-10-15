@@ -2,11 +2,11 @@
 
 ## Notebooks
 
-### [GETTING_STARTED__U-Net.ipynb](./notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
+### [U-Net_Train-Model-and-Make-Submission-File.ipynb](./notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/unet/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
 
-This is a tutorial of OpenPack Challenge 2022. 
+This is a tutorial of OpenPack Challenge 2022.
 In this notebook, we will build the U-Net, one of the basic architecture for segmentation, with the acceleration data from the left wrist (atr01).
 This notebook also shows how to make submission file (submission.json) for OpenPack Challenge 2022.
 In fact, the performance of this U-Net is poor. Please enjoy finding a better architecture and parameters.
