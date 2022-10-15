@@ -1,4 +1,4 @@
-__version__ = '0.5.1'
+__version__ = '0.5.2'
 from . import configs, data, lightning, models, utils
 
 __all__ = ["configs", "data", "lightning", "models", "utils"]
