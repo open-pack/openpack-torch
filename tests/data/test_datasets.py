@@ -16,7 +16,7 @@ def opcfg():
     cfg = OmegaConf.create({
         "path": {
             "openpack": {
-                "version": optk.DATASET_VERSION,
+                "version": optk.SAMPLE_DATASET_VERSION,
                 "rootdir": str(rootdir),
             }
         },
