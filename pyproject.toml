@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openpack-torch"
-version = "0.6.0"
+version = "0.6.1"
 description = "PyTorch extention to work around with OpenPack dataset"
 authors = ["Yoshimura Naoya <yoshimura.naoya@ist.osaka-u.ac.jp>"]
 license = "MIT"
@@ -9,7 +9,7 @@ homepage = "https://open-pack.github.io/home"
 repository = "https://github.com/open-pack/openpack-torch"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.11"
+python = ">=3.8,<3.11"
 numpy = "^1.22.3"
 torch = "^1.13.1"
 pandas = "^1.5.2"
