@@ -91,6 +91,7 @@ class BaseLightningModule(pl.LightningModule):
         acc = accuracy_score(
             preds_flat.transpose(0, 1),
             t_flat,
+            task=&#34;multiclass&#34;,
             average=&#34;weighted&#34;,
             num_classes=num_classes,
             ignore_index=ignore_index,
@@ -253,6 +254,7 @@ class BaseLightningModule(pl.LightningModule):
         acc = accuracy_score(
             preds_flat.transpose(0, 1),
             t_flat,
+            task=&#34;multiclass&#34;,
             average=&#34;weighted&#34;,
             num_classes=num_classes,
             ignore_index=ignore_index,
@@ -347,7 +349,7 @@ class BaseLightningModule(pl.LightningModule):
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li>pytorch_lightning.core.module.LightningModule</li>
-<li>pytorch_lightning.core.mixins.device_dtype_mixin.DeviceDtypeModuleMixin</li>
+<li>lightning_fabric.utilities.device_dtype_mixin._DeviceDtypeModuleMixin</li>
 <li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
 <li>pytorch_lightning.core.saving.ModelIO</li>
 <li>pytorch_lightning.core.hooks.ModelHooks</li>
@@ -410,6 +412,7 @@ class BaseLightningModule(pl.LightningModule):
     acc = accuracy_score(
         preds_flat.transpose(0, 1),
         t_flat,
+        task=&#34;multiclass&#34;,
         average=&#34;weighted&#34;,
         num_classes=num_classes,
         ignore_index=ignore_index,
@@ -600,7 +603,7 @@ override the :meth:<code>optimizer_step</code> hook.</li>
 <span>def <span class="ident">forward</span></span>(<span>self, x: torch.Tensor) ‑> torch.Tensor</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Same as :meth:<code>torch.nn.Module.forward()</code>.</p>
+<div class="desc"><p>Same as :meth:<code>torch.nn.Module.forward</code>.</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>*args</code></strong></dt>
@@ -922,7 +925,10 @@ def training_step(self, batch, batch_idx, hiddens):
 </code></pre>
 <h2 id="note">Note</h2>
 <p>The loss value shown in the progress bar is smoothed (averaged) over the last values,
-so it differs from the actual loss returned in train/validation step.</p></div>
+so it differs from the actual loss returned in train/validation step.</p>
+<h2 id="note_1">Note</h2>
+<p>When <code>accumulate_grad_batches</code> &gt; 1, the loss returned here will be automatically
+normalized by <code>accumulate_grad_batches</code> internally.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
