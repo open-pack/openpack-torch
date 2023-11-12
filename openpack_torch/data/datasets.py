@@ -118,7 +118,7 @@ class OpenPackImu(torch.utils.data.Dataset):
                     cfg.dataset.annotation.path.dir,
                     cfg.dataset.annotation.path.fname
                 )
-                df_label = optk.data.load_and_resample_operation_labels(
+                df_label = optk.data.load_and_resample_annotation(
                     path, ts_sess, classes=self.classes)
                 label = df_label["act_idx"].values
 

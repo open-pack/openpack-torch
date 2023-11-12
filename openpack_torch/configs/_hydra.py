@@ -47,7 +47,6 @@ def register_configs() -> None:
         "dataset/annotation": [
             optk.configs.datasets.annotations.OPENPACK_ACTIONS_ANNOTATION,
             optk.configs.datasets.annotations.OPENPACK_OPERATIONS_ANNOTATION,
-            optk.configs.datasets.annotations.ACTIVITY_1S_ANNOTATION,
         ],
         "dataset": [
             OPENPACK_ACC_DATASET_CONFIG, OPENPACK_2D_KEYPOINT_DATASET_CONFIG
@@ -60,5 +59,10 @@ def register_configs() -> None:
     # Activity Set
     cs.store(group="dataset/classes", name="OPENPACK_OPERATIONS",
              node=optk.configs.datasets.annotations.OPENPACK_OPERATIONS)
+    cs.store(group="dataset/classes", name="OPENPACK_OPERATIONS_1HZ",
+             node=optk.configs.datasets.annotations.OPENPACK_OPERATIONS_1HZ)
+
     cs.store(group="dataset/classes", name="OPENPACK_ACTIONS",
              node=optk.configs.datasets.annotations.OPENPACK_ACTIONS)
+    cs.store(group="dataset/classes", name="OPENPACK_ACTIONS_1HZ",
+             node=optk.configs.datasets.annotations.OPENPACK_ACTIONS_1HZ)

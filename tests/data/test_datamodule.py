@@ -4,6 +4,7 @@ from typing import Dict, Optional
 import openpack_toolkit as optk
 import pytest
 from omegaconf import OmegaConf
+
 from openpack_torch.data.datamodule import OpenPackBaseDataModule
 from openpack_torch.data.datasets import OpenPackImu as OpenPackImuDataset
 
@@ -21,7 +22,7 @@ def opcfg():
         },
         "dataset": {
             "stream": optk.configs.datasets.streams.ATR_ACC_STREAM,
-            "annotation": optk.configs.datasets.annotations.ACTIVITY_1S_ANNOTATION,
+            "annotation": optk.configs.datasets.annotations.OPENPACK_OPERATIONS_1HZ_ANNOTATION,
             "split": {
                 "name": "unit-test",
                 "train": [("U0102", "S0500")],

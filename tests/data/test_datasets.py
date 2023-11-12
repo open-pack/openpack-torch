@@ -6,6 +6,7 @@ import openpack_toolkit as optk
 import pytest
 from omegaconf import OmegaConf
 from openpack_toolkit import OPENPACK_OPERATIONS
+
 from openpack_torch.data.datasets import OpenPackImu, OpenPackKeypoint
 
 
@@ -22,7 +23,7 @@ def opcfg():
         },
         "dataset": {
             "stream": None,
-            "annotation": optk.configs.datasets.annotations.ACTIVITY_1S_ANNOTATION,
+            "annotation": optk.configs.datasets.annotations.OPENPACK_OPERATIONS_1HZ_ANNOTATION,
         }
     })
     return cfg
@@ -40,9 +41,10 @@ def test_OpenPackImu_01(opcfg):
     for index in range(len(dataset)):
         batch = dataset.__getitem__(index)
         x, t, ts = batch["x"], batch["t"], batch["ts"]
+        t_set = set(t.numpy().ravel())
         print(
-            f"index={index}: x={x.size()}[{x.dtype}], t={t.size()}[{t.dtype}],"
-            f"t={ts.size()}[{ts.dtype}]")
+            f"index={index}: x={x.size()}[{x.dtype}], t={t.size()}[{t.dtype}][set={t_set}],"
+            f"ts={ts.size()}[{ts.dtype}]")
         np.testing.assert_array_equal(x.size(), (3 * 4, 1800, 1))
 
 
@@ -62,8 +64,8 @@ def test_OpenPackImu_02(opcfg):
         x, t, ts = batch["x"], batch["t"], batch["ts"]
         t_set = set(t.numpy().ravel())
         print(
-            f"index={index}: x={x.size()}[{x.dtype}], t={t.size()}[{t.dtype}],"
-            f"t={ts.size()}[{ts.dtype}][set={t_set}]")
+            f"index={index}: x={x.size()}[{x.dtype}], t={t.size()}[{t.dtype}][set={t_set}],"
+            f"ts={ts.size()}[{ts.dtype}]")
 
         np.testing.assert_array_equal(x.size(), (3 * 4, 1800, 1))
         assert t_set <= set(
