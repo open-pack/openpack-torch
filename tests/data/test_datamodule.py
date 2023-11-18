@@ -25,10 +25,10 @@ def opcfg():
             "annotation": optk.configs.datasets.annotations.OPENPACK_OPERATIONS_1HZ_ANNOTATION,
             "split": {
                 "name": "unit-test",
-                "train": [("U0102", "S0500")],
-                "val": [("U0102", "S0500")],
-                "test": [("U0102", "S0500")],
-                "submission": [("U0102", "S0500")],
+                "train": [("U0209", "S0500")],
+                "val": [("U0209", "S0500")],
+                "test": [("U0209", "S0500")],
+                "submission": [("U0209", "S0500")],
             },
         },
         "train": {

@@ -8,9 +8,10 @@ import numpy as np
 import openpack_toolkit as optk
 import torch
 from omegaconf import DictConfig, open_dict
-from openpack_toolkit import OPENPACK_OPERATIONS
+from openpack_toolkit import OPENPACK_OPERATIONS, ActSet
 
 logger = getLogger(__name__)
+ACTSET_OPENPACK_OPERATIONS = ActSet(OPENPACK_OPERATIONS)
 
 
 class OpenPackImu(torch.utils.data.Dataset):
@@ -40,7 +41,7 @@ class OpenPackImu(torch.utils.data.Dataset):
             self,
             cfg: DictConfig,
             user_session_list: Tuple[Tuple[int, int], ...],
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
+            classes: optk.ActSet = ACTSET_OPENPACK_OPERATIONS,
             window: int = 30 * 60,
             submission: bool = False,
             debug: bool = False,
@@ -223,7 +224,7 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
             self,
             cfg: DictConfig,
             user_session: Tuple[Tuple[int, int], ...],
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
+            classes: optk.ActSet = ACTSET_OPENPACK_OPERATIONS,
             window: int = 15 * 60,
             submission: bool = False,
             debug: bool = False,

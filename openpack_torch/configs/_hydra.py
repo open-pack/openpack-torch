@@ -21,11 +21,15 @@ def register_configs() -> None:
             optk.configs.users.U0109,
             optk.configs.users.U0110,
             optk.configs.users.U0111,
+            optk.configs.users.U0201,
             optk.configs.users.U0202,
             optk.configs.users.U0203,
             optk.configs.users.U0204,
             optk.configs.users.U0205,
+            optk.configs.users.U0206,
             optk.configs.users.U0207,
+            optk.configs.users.U0208,
+            optk.configs.users.U0209,
             optk.configs.users.U0210,
         ],
         "dataset/stream": [
@@ -59,10 +63,6 @@ def register_configs() -> None:
     # Activity Set
     cs.store(group="dataset/classes", name="OPENPACK_OPERATIONS",
              node=optk.configs.datasets.annotations.OPENPACK_OPERATIONS)
-    cs.store(group="dataset/classes", name="OPENPACK_OPERATIONS_1HZ",
-             node=optk.configs.datasets.annotations.OPENPACK_OPERATIONS_1HZ)
 
     cs.store(group="dataset/classes", name="OPENPACK_ACTIONS",
              node=optk.configs.datasets.annotations.OPENPACK_ACTIONS)
-    cs.store(group="dataset/classes", name="OPENPACK_ACTIONS_1HZ",
-             node=optk.configs.datasets.annotations.OPENPACK_ACTIONS_1HZ)
