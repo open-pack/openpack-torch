@@ -1,0 +1,17 @@
+path:
+  openpack:
+    version: v1.0.0
+    rootdir: /content/data/datasets/openpack/${path.openpack.version}/
+  datasets:
+    openpack: ${path.openpack.rootdir}
+  logdir: # TODO: Rename to log/.
+    rootdir: /content/data/log/${metadata.name}/${metadata.labels.issue}/${metadata.task}/${dataset.split.name}-split/${dataset.stream.name}/${model.name}/${metadata.labels.params}/RUN${run}
+    model: ${path.logdir.rootdir}/model.pth
+    predict: ${path.logdir.rootdir}/pred/${train.checkpoint}/{user}-{session}
+    summary:
+      rootdir: ${path.logdir.rootdir}/summary/${train.checkpoint}
+      train: ${.rootdir}/train.csv
+      test: ${.rootdir}/test.csv
+      test-b2: ${.rootdir}/test-b2.csv
+      test-b3: ${.rootdir}/test-b3.csv
+      submission: ${.rootdir}/submission.csv

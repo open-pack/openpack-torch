@@ -6,9 +6,9 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry export --without-hashes --dev --output requirements.txt
 
 # == Stage.2: Build Custom Images (GPU enabled) ==
-FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
-LABEL pytorch="1.13.1" \
-    cuda="11.6" \
+FROM pytorch/pytorch:2.1.1-cuda12.1-cudnn8-runtime
+LABEL pytorch="2.1.1" \
+    cuda="12.1" \
     cudnn="8"
 ENV DEBIAN_FRONTEND noninteractive
 ENV PYTHONUNBUFFERED=1

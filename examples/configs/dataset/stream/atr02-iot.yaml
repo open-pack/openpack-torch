@@ -1,0 +1,42 @@
+kind: dataset/stream/multimodal
+name: atr02-iot
+mdetadata:
+  labels:
+    app: openpack-benchmarks
+    version: 0.1.0
+    multimodal: true
+spec:
+  imu:
+    kind: dataset/stream/imu
+    path:
+      dir: ${path.openpack.rootdir}/${user.name}/atr/${device}
+      fname: ${session}.csv
+      full_path: ${.dir}/${.fname}
+    devices:
+      - "atr02"
+    acc: true
+    gyro: false
+    quat: false
+  iot:
+    kind: dataset/stream/iot
+    spec:
+      anchor:
+        dim: 2
+        linked_class:
+          0: 6
+          1: 6
+      devices:
+        kind: dataset/stream/multimodal
+        spec:
+          ht:
+            kind: dataset/stream
+            spec:
+              path:
+                dir: ${path.openpack.rootdir}/${user.name}/system/ht
+                fname: ${session}.csv
+          printer:
+            kind: dataset/stream
+            spec:
+              path:
+                dir: ${path.openpack.rootdir}/${user.name}/system/printer
+                fname: ${session}.csv

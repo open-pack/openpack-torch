@@ -1,0 +1,48 @@
+defaults:
+  - path
+  - dataset/annotation: openpack-operations-1hz
+  - dataset/stream: atr02-iot
+  - dataset/split: openpack-challenge-2022
+  - dataset/classes: OPENPACK_OPERATIONS
+  - optimizer: adam-exp
+  - model: dcl
+  - _self_
+  - override hydra/job_logging: custom
+run: 0
+debug: true
+mode: "test"
+hydra:
+  run:
+    dir: ${path.logdir.rootdir}
+  job:
+    chdir: true
+metadata:
+  name: benchmark1
+  task: ${dataset.annotation.name}
+  labels:
+    app: imwut
+    issue: "I01-EXP01-V1"
+    params: "${optimizer.name}/LR${optimizer.lr}/TESTSET-${.test_set}"
+    benchmarkType: benchmark1
+    test_set: U0101
+train:
+  num_workers: 3
+  batch_size: 32
+  epochs:
+    minimum: 300
+    maximum: 1000
+  window: 1800 # 30Hz * 60s
+  checkpoint: last
+  random_crop: true
+  val_split_siz: 0.2
+  early_stop:
+    monitor: "train/acc"
+    min_delta: 0.001
+    patience: 30
+    verbose: false
+    mode: "max"
+  debug:
+    batch_size: 8
+    epochs:
+      minimum: 5
+      maximum: 10

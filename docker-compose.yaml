@@ -4,10 +4,12 @@ services:
     build:
       context: ./
       dockerfile: ./docker/Dockerfile
-    image: openpack-torch:v1.13.1-0
+    image: openpack-torch:v2.1.1-0
     container_name: openpack-torch
     command: jupyter lab --ip 0.0.0.0 --port 8888 --no-browser --allow-root
     tty: true
+    environment:
+      PYTHONPATH: "/content/openpack-torch"
     volumes:
       - ./:/content/openpack-torch # Code
       - ../data:/content/data/ # Data Directory

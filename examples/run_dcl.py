@@ -5,15 +5,20 @@ from typing import Dict, Optional
 import hydra
 import numpy as np
 import openpack_toolkit as optk
-import openpack_torch as optorch
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig, OmegaConf
 from openpack_toolkit import OPENPACK_OPERATIONS
 from openpack_toolkit.codalab.operation_segmentation import (
-    construct_submission_dict, eval_operation_segmentation_wrapper,
-    make_submission_zipfile)
+    construct_submission_dict,
+    eval_operation_segmentation_wrapper,
+    make_submission_zipfile,
+)
+
+import openpack_torch as optorch
+from openpack_torch.lightning import EarlyStopError
+from openpack_torch.utils.test_helper import test_helper
 
 logger = getLogger(__name__)
 optorch.configs.register_configs()
@@ -52,24 +57,37 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
 
 
 class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
-
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
-        dstream_conf = self.cfg.dataset.stream
-        in_ch = len(dstream_conf.devices) * 3
+        dim = 0
+        if self.cfg.dataset.stream.spec.imu.acc:
+            dim += 3
+        if self.cfg.dataset.stream.spec.imu.gyro:
+            dim += 3
+        if self.cfg.dataset.stream.spec.imu.quat:
+            dim += 4
 
-        model = optorch.models.imu.DeepConvLSTM(
-            in_ch,
-            len(OPENPACK_OPERATIONS),
-        )
+        input_dim = len(self.cfg.dataset.stream.spec.imu.devices) * dim
+        # TODO: Get output size from an object other than config.
+        output_dim = len(self.cfg.dataset.annotation.spec.classes)
+
+        model = optorch.models.imu.DeepConvLSTM(input_dim, output_dim)
         return model
 
-    def training_step(self, batch: Dict, batch_idx: int) -> Dict:
+    def forward(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
+        return self.net(*args, **kwargs)
+
+    def train_val_common_step(self, batch: Dict, batch_idx):
         x = batch["x"].to(device=self.device, dtype=torch.float)
         t = batch["t"].to(device=self.device, dtype=torch.long)
-        y_hat = self(x).squeeze(3)
+        if "x_iot" in batch.keys():
+            anchor = batch["x_iot"].to(device=self.device, dtype=torch.float)
+            y_hat = self(x, anchor).squeeze(3)
+        else:
+            y_hat = self(x).squeeze(3)
 
         loss = self.criterion(y_hat, t)
         acc = self.calc_accuracy(y_hat, t)
+
         return {"loss": loss, "acc": acc}
 
     def test_step(self, batch: Dict, batch_idx: int) -> Dict:
@@ -77,9 +95,14 @@ class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
         t = batch["t"].to(device=self.device, dtype=torch.long)
         ts_unix = batch["ts"]
 
-        y_hat = self(x).squeeze(3)
+        if "x_iot" in batch.keys():
+            anchor = batch["x_iot"].to(device=self.device, dtype=torch.float)
+            y_hat = self(x, anchor).squeeze(3)
+        else:
+            y_hat = self(x).squeeze(3)
 
         outputs = dict(t=t, y=y_hat, unixtime=ts_unix)
+        self.test_step_outputs.append(outputs)
         return outputs
 
 
@@ -97,32 +120,47 @@ def train(cfg: DictConfig):
     plmodel.to(dtype=torch.float, device=device)
     logger.info(plmodel)
 
-    num_epoch = cfg.train.debug.epochs if cfg.debug else cfg.train.epochs
+    min_epoch = (
+        cfg.train.debug.epochs.minimum if cfg.debug else cfg.train.epochs.minimum
+    )
+    max_epoch = (
+        cfg.train.debug.epochs.maximum if cfg.debug else cfg.train.epochs.maximum
+    )
+    patience = min(cfg.train.early_stop.patience, min_epoch - 1)
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        save_top_k=0,
+        save_top_k=1,
         save_last=True,
-        monitor=None,
+        mode=cfg.train.early_stop.mode,
+        monitor=cfg.train.early_stop.monitor,
+        filename="{epoch:02d}-{train/loss:.2f}-{val/loss:.2f}",
+        verbose=False,
     )
 
+    early_stop_callback = pl.callbacks.EarlyStopping(
+        **cfg.train.early_stop,
+    )
+
+    pl_logger = pl.loggers.CSVLogger(logdir)
     trainer = pl.Trainer(
-        gpus=[0],
-        max_epochs=num_epoch,
-        logger=False,  # disable logging module
+        accelerator="gpu",
+        devices=1,
+        min_epochs=1,
+        max_epochs=max_epoch,
+        logger=pl_logger,
         default_root_dir=logdir,
-        enable_progress_bar=False,  # disable progress bar
+        enable_progress_bar=True,  # disable progress bar
         enable_checkpointing=True,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, early_stop_callback],
+        log_every_n_steps=4,
     )
-    logger.debug(f"logdir = {logdir}")
 
-    logger.info(f"Start training for {num_epoch} epochs.")
-    trainer.fit(plmodel, datamodule)
-    logger.info("Finish training!")
-
-    logger.debug(f"logdir = {logdir}")
-    save_training_results(plmodel.log_dict, logdir)
-    logger.debug(f"logdir = {logdir}")
+    logger.info(f"Start training for {max_epoch} epochs.")
+    try:
+        trainer.fit(plmodel, datamodule)
+    except EarlyStopError as e:
+        logger.warning(e)
+    logger.info(f"Finish training! (logdir = {logdir})")
 
 
 def test(cfg: DictConfig, mode: str = "test"):
@@ -132,85 +170,37 @@ def test(cfg: DictConfig, mode: str = "test"):
     device = torch.device("cuda")
     logdir = Path(cfg.path.logdir.rootdir)
 
+    # datamodule = init_datamodule(cfg)
     datamodule = OpenPackImuDataModule(cfg)
     datamodule.setup(mode)
 
-    ckpt_path = Path(logdir, "checkpoints", "last.ckpt")
+    if cfg.train.checkpoint == "best":
+        raise NotImplementedError()
+    elif cfg.train.checkpoint == "last":
+        ckpt_path = Path(
+            logdir, "lightning_logs", "version_0", "checkpoints", "last.ckpt"
+        )
+    else:
+        raise ValueError()
     logger.info(f"load checkpoint from {ckpt_path}")
     plmodel = DeepConvLSTMLM.load_from_checkpoint(ckpt_path, cfg=cfg)
     plmodel.to(dtype=torch.float, device=device)
 
     trainer = pl.Trainer(
-        gpus=[0],
+        accelerator="gpu",
+        devices=1,
         logger=False,  # disable logging module
-        default_root_dir=None,
+        default_root_dir=logdir,
         enable_progress_bar=False,  # disable progress bar
         enable_checkpointing=False,  # does not save model check points
     )
 
-    if mode == "test":
-        dataloaders = datamodule.test_dataloader()
-        split = cfg.dataset.split.test
-    elif mode in ("submission", "test-on-submission"):
-        dataloaders = datamodule.submission_dataloader()
-        split = cfg.dataset.split.submission
-    outputs = dict()
-    for i, dataloader in enumerate(dataloaders):
-        user, session = split[i]
-        logger.info(f"test on {user}-{session}")
-
-        trainer.test(plmodel, dataloader)
-
-        # save model outputs
-        pred_dir = Path(
-            cfg.path.logdir.predict.format(user=user, session=session)
-        )
-        pred_dir.mkdir(parents=True, exist_ok=True)
-
-        for key, arr in plmodel.test_results.items():
-            path = Path(pred_dir, f"{key}.npy")
-            np.save(path, arr)
-            logger.info(f"save {key}[shape={arr.shape}] to {path}")
-
-        key = f"{user}-{session}"
-        outputs[key] = {
-            "y": plmodel.test_results.get("y"),
-            "unixtime": plmodel.test_results.get("unixtime"),
-        }
-        if mode in ("test", "test-on-submission"):
-            outputs[key].update({
-                "t_idx": plmodel.test_results.get("t"),
-            })
-
-    if mode in ("test", "test-on-submission"):
-        # save performance summary
-        df_summary = eval_operation_segmentation_wrapper(
-            cfg, outputs, OPENPACK_OPERATIONS,
-        )
-        if mode == "test":
-            path = Path(cfg.path.logdir.summary.test)
-        elif mode == "test-on-submission":
-            path = Path(cfg.path.logdir.summary.submission)
-
-        # NOTE: change pandas option to show tha all rows/cols.
-        pd.set_option('display.max_rows', None)
-        pd.set_option('display.max_columns', None)
-        pd.set_option("display.width", 200)
-        df_summary.to_csv(path, index=False)
-        logger.info(f"df_summary:\n{df_summary}")
-    elif mode == "submission":
-        # make submission file
-        metadata = {
-            "dataset.split.name": cfg.dataset.split.name,
-            "mode": mode,
-        }
-        submission_dict = construct_submission_dict(
-            outputs, OPENPACK_OPERATIONS)
-        make_submission_zipfile(submission_dict, logdir, metadata=metadata)
+    test_helper(cfg, mode, datamodule, plmodel, trainer)
 
 
-@ hydra.main(version_base=None, config_path="./configs",
-             config_name="deep-conv-lstm.yaml")
+@hydra.main(
+    version_base=None, config_path="./configs", config_name="deep-conv-lstm.yaml"
+)
 def main(cfg: DictConfig):
     # DEBUG
     if cfg.debug:

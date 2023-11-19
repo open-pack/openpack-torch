@@ -1,0 +1,80 @@
+kind: dataset/annotation/csv/sequence
+name: openpack-operations-1hz-annotation
+metadata:
+  labels:
+    type: annotation/operation
+    version: v3.5.0
+    dependency: openpack-operations
+    resolution: 1Hz
+spec:
+  path:
+    dir: ${path.openpack.rootdir}/${user.name}/annotation/openpack-operations-1hz
+    fname: ${session}.csv
+  classes:
+    - id: 100
+      name: Picking
+      description: Check the order-sheet and go to the back table to pick up the items.
+      version: v3.0.0
+      ignore: false
+    - id: 200
+      name: Relocate Item Label
+      description:
+        Peel off the label from the items and place it on the bottom margin
+        of the order sheet. Check the item names and quantity on the list and label
+        with a ballpoint pen. (When picking is done in one round trip, this action is
+        set as the beginning of the box.)
+      version: v3.2.2
+      ignore: false
+    - id: 300
+      name: Assemble Box
+      description: Assemble cardboard boxes that match the size of the items.
+      version: v3.2.2
+      ignore: false
+    - id: 400
+      name: Insert Items
+      description: Put the goods into the box. Fill the box with air cushion.
+      version: v3.2.2
+      ignore: false
+    - id: 500
+      name: Close Box
+      description: Close the box with craft tape.
+      version: v3.2.2
+      ignore: false
+    - id: 600
+      name: Attach Box Label
+      description: Attach the box number label to the side of the box.
+      version: v3.2.2
+      ignore: false
+    - id: 700
+      name: Scan Label
+      description:
+        'Scan barcodes with the handy scanner in the following order: (1)
+        order sheet, (2) box number sticker, (3) item label. Then press the "ESC" button
+        on the handy scanner twice. Next, scan barcodes with the scanner of the label
+        printer in the following order: (1) order sheet, (2) code on the label printer.'
+      version: v3.2.2
+      ignore: false
+    - id: 800
+      name: Attach Shipping Label
+      description:
+        Attach the shipping label printed out from the label printer to the
+        box.
+      version: v3.2.2
+      ignore: false
+    - id: 900
+      name: Put on Back Table
+      description: Move the completed packing box under the back table.
+      version: v3.2.2
+      ignore: false
+    - id: 1000
+      name: Fill out Order
+      description:
+        Write their signatures in the confirmation column of the order sheet
+        and insert it into the tray for completed order sheets.
+      version: v3.2.2
+      ignore: false
+    - id: 8100
+      name: "Null"
+      description: For the operation label, ID8200 is translated into this label (ID8100).
+      version: v3.2.2
+      ignore: true

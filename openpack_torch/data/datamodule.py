@@ -13,7 +13,9 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-logger = getLogger(__name__)
+from openpack_torch.data.utils import assemble_sequence_list_from_cfg
+
+log = getLogger(__name__)
 
 
 class OpenPackBaseDataModule(pl.LightningDataModule):
@@ -29,6 +31,7 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         batch_size (int): batch size.
         debug (bool): If True, enable debug mode.
     """
+
     dataset_class: torch.utils.data.Dataset
 
     def __init__(self, cfg: DictConfig):
@@ -61,7 +64,11 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         Returns:
             Dict:
         """
-        raise NotImplementedError()
+        kwargs = {
+            "window": self.cfg.train.window,
+            "debug": self.cfg.debug,
+        }
+        return kwargs
 
     def _init_datasets(
         self,
@@ -82,15 +89,22 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         for user, session in user_session:
             key = f"{user}-{session}"
             datasets[key] = self.dataset_class(
-                copy.deepcopy(self.cfg), [(user, session)], **kwargs)
+                copy.deepcopy(self.cfg), [(user, session)], **kwargs
+            )
         return datasets
 
     def setup(self, stage: Optional[str] = None) -> None:
-        split = self.cfg.dataset.split
+        if hasattr(self.cfg.dataset.split, "spec"):
+            split = self.cfg.dataset.split.spec
+        else:
+            split = self.cfg.dataset.split
 
         if stage in (None, "fit"):
             kwargs = self.get_kwargs_for_datasets(stage="train")
             self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
+            if self.cfg.train.random_crop:
+                self.op_train.random_crop = True
+                log.debug(f"enable random_crop in training dataset: {self.op_train}")
         else:
             self.op_train = None
 
@@ -116,17 +130,18 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
         else:
             self.op_submission = None
 
-        logger.info(f"dataset[train]: {self.op_train}")
-        logger.info(f"dataset[val]: {self.op_val}")
-        logger.info(f"dataset[test]: {self.op_test}")
-        logger.info(f"dataset[submission]: {self.op_submission}")
+        log.info(f"dataset[train]: {self.op_train}")
+        log.info(f"dataset[val]: {self.op_val}")
+        log.info(f"dataset[test]: {self.op_test}")
+        log.info(f"dataset[submission]: {self.op_submission}")
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.op_train,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=self.cfg.train.num_workers)
+            num_workers=self.cfg.train.num_workers,
+        )
 
     def val_dataloader(self) -> List[DataLoader]:
         dataloaders = []
@@ -136,7 +151,8 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
                     dataset,
                     batch_size=self.batch_size,
                     shuffle=False,
-                    num_workers=self.cfg.train.num_workers)
+                    num_workers=self.cfg.train.num_workers,
+                )
             )
         return dataloaders
 
@@ -148,7 +164,8 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
                     dataset,
                     batch_size=self.batch_size,
                     shuffle=False,
-                    num_workers=self.cfg.train.num_workers)
+                    num_workers=self.cfg.train.num_workers,
+                )
             )
         return dataloaders
 
@@ -160,6 +177,107 @@ class OpenPackBaseDataModule(pl.LightningDataModule):
                     dataset,
                     batch_size=self.batch_size,
                     shuffle=False,
-                    num_workers=self.cfg.train.num_workers)
+                    num_workers=self.cfg.train.num_workers,
+                )
+            )
+        return dataloaders
+
+
+class OpenPackBaseFlexSetDataModule(OpenPackBaseDataModule):
+    dataset_train = None
+    dataset_val = None
+    dataset_test = None
+
+    def _init_datasets(
+        self,
+        user_session: Tuple[int, int],
+        kwargs: Dict,
+    ) -> Dict[str, torch.utils.data.Dataset]:
+        """Returns list of initialized dataset object.
+        Args:
+            rootdir (Path): _description_
+            user_session (Tuple[int, int]): _description_
+            kwargs (Dict): _description_
+        Returns:
+            Dict[str, torch.utils.data.Dataset]: dataset objects
+        """
+        datasets = dict()
+        for user, session in user_session:
+            key = f"{user}-{session}"
+            datasets[key] = self.dataset_class(
+                copy.deepcopy(self.cfg), [(user, session)], **kwargs
+            )
+        return datasets
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        split = self.cfg.dataset.split
+
+        if stage in (None, "fit"):
+            kwargs = self.get_kwargs_for_datasets(stage="fit")
+            split = assemble_sequence_list_from_cfg(self.cfg, stage)
+            self.dataset_train = self.dataset_class(self.cfg, split, **kwargs)
+        else:
+            self.dataset_train = None
+
+        # TODO: Generate ValDataset from Train.
+        if stage in (None, "fit", "validate"):
+            self.dataset_train, self.dataset_val = split_dataset(
+                self.cfg,
+                self.dataset_train,
+                val_split_size=self.cfg.train.val_split_siz,
+            )
+        else:
+            self.dataset_val = None
+
+        if stage in (None, "test"):
+            kwargs = self.get_kwargs_for_datasets(stage="test")
+            split = assemble_sequence_list_from_cfg(self.cfg, stage)
+            self.dataset_test = self._init_datasets(split, kwargs)
+        else:
+            self.dataset_test = None
+
+        log.info(f"dataset[train]: {self.dataset_train}")
+        log.info(f"dataset[val]: {self.dataset_val}")
+        log.info(f"dataset[test]: {self.dataset_test}")
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.dataset_train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.cfg.train.num_workers,
+        )
+
+    def val_dataloader(self) -> List[DataLoader]:
+        return DataLoader(
+            self.dataset_val,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.cfg.train.num_workers,
+        )
+
+    def test_dataloader(self) -> List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.dataset_test.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers,
+                )
+            )
+        return dataloaders
+
+    def submission_dataloader(self) -> List[DataLoader]:
+        dataloaders = []
+        for key, dataset in self.dataset_submission.items():
+            dataloaders.append(
+                DataLoader(
+                    dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.cfg.train.num_workers,
+                )
             )
         return dataloaders

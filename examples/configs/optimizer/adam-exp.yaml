@@ -1,0 +1,7 @@
+name: "adam-exp"
+type: "Adam"
+lr: 1e-3
+weight_decay: 0.0001
+scheduler:
+  type: ExponentialLR
+  gamma: 0.99
