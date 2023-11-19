@@ -3,18 +3,10 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import hydra
-import numpy as np
 import openpack_toolkit as optk
-import pandas as pd
 import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig, OmegaConf
-from openpack_toolkit import OPENPACK_OPERATIONS
-from openpack_toolkit.codalab.operation_segmentation import (
-    construct_submission_dict,
-    eval_operation_segmentation_wrapper,
-    make_submission_zipfile,
-)
 
 import openpack_torch as optorch
 from openpack_torch.lightning import EarlyStopError
@@ -22,10 +14,12 @@ from openpack_torch.utils.test_helper import test_helper
 
 logger = getLogger(__name__)
 optorch.configs.register_configs()
-optorch.utils.reset_seed()
+optorch.utils.reset_seed(seed=0)
 
 
 # ----------------------------------------------------------------------
+
+
 class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
     dataset_class = optorch.data.datasets.OpenPackImu
 
@@ -37,7 +31,7 @@ class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
         return kwargs
 
 
-class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
+class UNetLM(optorch.lightning.BaseLightningModule):
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
         dim = 0
         if self.cfg.dataset.stream.spec.imu.acc:
@@ -48,27 +42,21 @@ class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
             dim += 4
 
         input_dim = len(self.cfg.dataset.stream.spec.imu.devices) * dim
-        # TODO: Get output size from an object other than config.
         output_dim = len(self.cfg.dataset.annotation.spec.classes)
-
-        model = optorch.models.imu.DeepConvLSTM(input_dim, output_dim)
+        model = optorch.models.imu.UNet(
+            input_dim,
+            output_dim,
+            depth=cfg.model.spec.depth,
+        )
         return model
 
-    def forward(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
-        return self.net(*args, **kwargs)
-
-    def train_val_common_step(self, batch: Dict, batch_idx):
+    def train_val_common_step(self, batch: Dict, batch_idx: int) -> Dict:
         x = batch["x"].to(device=self.device, dtype=torch.float)
         t = batch["t"].to(device=self.device, dtype=torch.long)
-        if "x_iot" in batch.keys():
-            anchor = batch["x_iot"].to(device=self.device, dtype=torch.float)
-            y_hat = self(x, anchor).squeeze(3)
-        else:
-            y_hat = self(x).squeeze(3)
+        y_hat = self(x).squeeze(3)
 
         loss = self.criterion(y_hat, t)
         acc = self.calc_accuracy(y_hat, t)
-
         return {"loss": loss, "acc": acc}
 
     def test_step(self, batch: Dict, batch_idx: int) -> Dict:
@@ -76,11 +64,7 @@ class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
         t = batch["t"].to(device=self.device, dtype=torch.long)
         ts_unix = batch["ts"]
 
-        if "x_iot" in batch.keys():
-            anchor = batch["x_iot"].to(device=self.device, dtype=torch.float)
-            y_hat = self(x, anchor).squeeze(3)
-        else:
-            y_hat = self(x).squeeze(3)
+        y_hat = self(x).squeeze(3)
 
         outputs = dict(t=t, y=y_hat, unixtime=ts_unix)
         self.test_step_outputs.append(outputs)
@@ -97,17 +81,13 @@ def train(cfg: DictConfig):
     optk.utils.io.cleanup_dir(logdir, exclude="hydra")
 
     datamodule = OpenPackImuDataModule(cfg)
-    plmodel = DeepConvLSTMLM(cfg)
+    plmodel = UNetLM(cfg)
     plmodel.to(dtype=torch.float, device=device)
     logger.info(plmodel)
 
-    min_epoch = (
-        cfg.train.debug.epochs.minimum if cfg.debug else cfg.train.epochs.minimum
-    )
     max_epoch = (
         cfg.train.debug.epochs.maximum if cfg.debug else cfg.train.epochs.maximum
     )
-    patience = min(cfg.train.early_stop.patience, min_epoch - 1)
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         save_top_k=1,
@@ -151,7 +131,6 @@ def test(cfg: DictConfig, mode: str = "test"):
     device = torch.device("cuda")
     logdir = Path(cfg.path.logdir.rootdir)
 
-    # datamodule = init_datamodule(cfg)
     datamodule = OpenPackImuDataModule(cfg)
     datamodule.setup(mode)
 
@@ -164,7 +143,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     else:
         raise ValueError()
     logger.info(f"load checkpoint from {ckpt_path}")
-    plmodel = DeepConvLSTMLM.load_from_checkpoint(ckpt_path, cfg=cfg)
+    plmodel = UNetLM.load_from_checkpoint(ckpt_path, cfg=cfg)
     plmodel.to(dtype=torch.float, device=device)
 
     trainer = pl.Trainer(
@@ -179,9 +158,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     test_helper(cfg, mode, datamodule, plmodel, trainer)
 
 
-@hydra.main(
-    version_base=None, config_path="./configs", config_name="deep-conv-lstm.yaml"
-)
+@hydra.main(version_base=None, config_path="./configs", config_name="unet.yaml")
 def main(cfg: DictConfig):
     # DEBUG
     if cfg.debug:

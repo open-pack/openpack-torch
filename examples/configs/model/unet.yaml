@@ -1,0 +1,3 @@
+name: UNet
+spec:
+  depth: 5

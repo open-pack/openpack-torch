@@ -1,0 +1,8 @@
+run: 0
+debug: true
+mode: "test"
+hydra:
+  run:
+    dir: ${path.logdir.rootdir}
+  job:
+    chdir: true

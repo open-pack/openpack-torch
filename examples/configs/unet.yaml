@@ -6,7 +6,7 @@ defaults:
   - dataset/split: openpack-challenge-2022
   - dataset/classes: OPENPACK_OPERATIONS
   - optimizer: adam-exp
-  - model: dcl
+  - model: unet
   - _self_
   - override hydra/job_logging: custom
 metadata:

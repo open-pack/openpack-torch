@@ -129,6 +129,7 @@ class BaseLightningModule(pl.LightningModule):
             prog_bar=True,
             logger=True,
         )
+        return output
 
     def validation_step(
         self, batch: Dict, batch_idx: int, dataloader_idx: int = 0
@@ -143,11 +144,17 @@ class BaseLightningModule(pl.LightningModule):
             prog_bar=True,
             logger=True,
         )
+        return output
 
     def test_step(self, batch: Dict, batch_idx: int) -> Dict:
         raise NotImplementedError()
 
     def on_test_epoch_end(self):
+        if len(self.test_step_outputs) == 0:
+            raise ValueError(
+                "Size of test_step_outputs is 0. Did you forgot to call "
+                "`self.test_step_outputs.append(outputs)` in test_step()?"
+            )
         outputs = self.test_step_outputs
 
         keys = tuple(outputs[0].keys())
