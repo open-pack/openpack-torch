@@ -22,53 +22,47 @@ from openpack_torch.utils.test_helper import test_helper
 
 logger = getLogger(__name__)
 optorch.configs.register_configs()
-optorch.utils.reset_seed()
+optorch.utils.reset_seed(seed=0)
 
 
 # ----------------------------------------------------------------------
-class OpenPackImuDataModule(optorch.data.OpenPackBaseDataModule):
-    dataset_class = optorch.data.datasets.OpenPackImu
+class OpenPackKeypointDataModule(optorch.data.OpenPackBaseDataModule):
+    dataset_class = optorch.data.datasets.Kinect2dKptDataset
 
     def get_kwargs_for_datasets(self, stage: Optional[str] = None) -> Dict:
         kwargs = {
-            "window": self.cfg.train.window,
             "debug": self.cfg.debug,
+            "window": self.cfg.train.window,
         }
         return kwargs
 
 
-class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
+class STGCN4SegLM(optorch.lightning.BaseLightningModule):
     def init_model(self, cfg: DictConfig) -> torch.nn.Module:
-        dim = 0
-        if self.cfg.dataset.stream.spec.imu.acc:
-            dim += 3
-        if self.cfg.dataset.stream.spec.imu.gyro:
-            dim += 3
-        if self.cfg.dataset.stream.spec.imu.quat:
-            dim += 4
-
-        input_dim = len(self.cfg.dataset.stream.spec.imu.devices) * dim
-        # TODO: Get output size from an object other than config.
+        input_dim = 3
         output_dim = len(self.cfg.dataset.annotation.spec.classes)
 
-        model = optorch.models.imu.DeepConvLSTM(input_dim, output_dim)
+        Ks = cfg.model.spec.Ks
+        A = optorch.models.keypoint.get_adjacency_matrix(
+            layout="MSCOCO", hop_size=Ks - 1
+        )
+        model = optorch.models.keypoint.STGCN4Seg(
+            input_dim,
+            output_dim,
+            Ks=cfg.model.spec.Ks,
+            Kt=cfg.model.spec.Kt,
+            A=A,
+        )
         return model
 
-    def forward(self, *args, **kwargs) -> Dict[str, torch.Tensor]:
-        return self.net(*args, **kwargs)
-
-    def train_val_common_step(self, batch: Dict, batch_idx):
+    def train_val_common_step(self, batch: Dict, batch_idx: int) -> Dict:
         x = batch["x"].to(device=self.device, dtype=torch.float)
         t = batch["t"].to(device=self.device, dtype=torch.long)
-        if "x_iot" in batch.keys():
-            anchor = batch["x_iot"].to(device=self.device, dtype=torch.float)
-            y_hat = self(x, anchor).squeeze(3)
-        else:
-            y_hat = self(x).squeeze(3)
+
+        y_hat = self(x).squeeze(3)
 
         loss = self.criterion(y_hat, t)
         acc = self.calc_accuracy(y_hat, t)
-
         return {"loss": loss, "acc": acc}
 
     def test_step(self, batch: Dict, batch_idx: int) -> Dict:
@@ -76,11 +70,7 @@ class DeepConvLSTMLM(optorch.lightning.BaseLightningModule):
         t = batch["t"].to(device=self.device, dtype=torch.long)
         ts_unix = batch["ts"]
 
-        if "x_iot" in batch.keys():
-            anchor = batch["x_iot"].to(device=self.device, dtype=torch.float)
-            y_hat = self(x, anchor).squeeze(3)
-        else:
-            y_hat = self(x).squeeze(3)
+        y_hat = self(x).squeeze(3)
 
         outputs = dict(t=t, y=y_hat, unixtime=ts_unix)
         self.test_step_outputs.append(outputs)
@@ -96,8 +86,8 @@ def train(cfg: DictConfig):
     logger.debug(f"logdir = {logdir}")
     optk.utils.io.cleanup_dir(logdir, exclude="hydra")
 
-    datamodule = OpenPackImuDataModule(cfg)
-    plmodel = DeepConvLSTMLM(cfg)
+    datamodule = OpenPackKeypointDataModule(cfg)
+    plmodel = STGCN4SegLM(cfg)
     plmodel.to(dtype=torch.float, device=device)
     logger.info(plmodel)
 
@@ -113,7 +103,6 @@ def train(cfg: DictConfig):
         filename="{epoch:02d}-{train/loss:.2f}-{val/loss:.2f}",
         verbose=False,
     )
-
     early_stop_callback = pl.callbacks.EarlyStopping(
         **cfg.train.early_stop,
     )
@@ -147,8 +136,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     device = torch.device("cuda")
     logdir = Path(cfg.path.logdir.rootdir)
 
-    # datamodule = init_datamodule(cfg)
-    datamodule = OpenPackImuDataModule(cfg)
+    datamodule = OpenPackKeypointDataModule(cfg)
     datamodule.setup(mode)
 
     if cfg.train.checkpoint == "best":
@@ -160,7 +148,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     else:
         raise ValueError()
     logger.info(f"load checkpoint from {ckpt_path}")
-    plmodel = DeepConvLSTMLM.load_from_checkpoint(ckpt_path, cfg=cfg)
+    plmodel = STGCN4SegLM.load_from_checkpoint(ckpt_path, cfg=cfg)
     plmodel.to(dtype=torch.float, device=device)
 
     trainer = pl.Trainer(
@@ -175,9 +163,7 @@ def test(cfg: DictConfig, mode: str = "test"):
     test_helper(cfg, mode, datamodule, plmodel, trainer)
 
 
-@hydra.main(
-    version_base=None, config_path="./configs", config_name="deep-conv-lstm.yaml"
-)
+@hydra.main(version_base=None, config_path="./configs", config_name="st-gcn.yaml")
 def main(cfg: DictConfig):
     # DEBUG
     if cfg.debug:

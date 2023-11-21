@@ -2,11 +2,11 @@ defaults:
   - common
   - path
   - dataset/annotation: openpack-operations-1hz
-  - dataset/stream: atr02-iot
+  - dataset/stream: k4a-2d-kpt
   - dataset/split: openpack-challenge-2022
   - dataset/classes: OPENPACK_OPERATIONS
   - optimizer: adam-exp
-  - model: dcl
+  - model: st-gcn
   - _self_
   - override hydra/job_logging: custom
 metadata:
@@ -34,7 +34,7 @@ train:
     verbose: false
     mode: "max"
   debug:
-    batch_size: 8
+    batch_size: 4
     epochs:
       minimum: 5
       maximum: 10

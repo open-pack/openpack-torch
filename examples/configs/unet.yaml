@@ -13,7 +13,7 @@ metadata:
   name: benchmark1
   task: ${dataset.annotation.name}
   labels:
-    app: imwut
+    app: openpack-benchmarks
     issue: "I01-EXP01-V1"
     params: "${optimizer.name}/LR${optimizer.lr}"
     benchmarkType: benchmark1

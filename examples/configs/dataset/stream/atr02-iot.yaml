@@ -3,7 +3,7 @@ name: atr02-iot
 mdetadata:
   labels:
     app: openpack-benchmarks
-    version: 0.1.0
+    version: 1.0.0
     multimodal: true
 spec:
   imu:
