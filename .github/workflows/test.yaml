@@ -27,5 +27,5 @@ jobs:
         run: |
           poetry install
           export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
-          poetry run pytest --cov
+          poetry run pytest --cov ./tests/
         shell: bash
