@@ -27,15 +27,28 @@ ATR_ATTACHED_IN_WRONG_DIRECTION = (
 
 
 def load_imu_wrapper(cfg: DictConfig) -> Sequence:
+    has_spec = hasattr(cfg.dataset.stream, "spec")
+
     paths_imu = []
-    for device in cfg.dataset.stream.spec.imu.devices:
+    devices = (
+        cfg.dataset.stream.spec.imu.devices
+        if has_spec
+        else cfg.dataset.stream.imu.devices
+    )
+    for device in devices:
         with open_dict(cfg):
             cfg.device = device
 
-        path = Path(
-            cfg.dataset.stream.spec.imu.path.dir,
-            cfg.dataset.stream.spec.imu.path.fname,
-        )
+        if has_spec:
+            path = Path(
+                cfg.dataset.stream.spec.imu.path.dir,
+                cfg.dataset.stream.spec.imu.path.fname,
+            )
+        else:
+            path = Path(
+                cfg.dataset.stream.imu.path.dir,
+                cfg.dataset.stream.imu.path.fname,
+            )
         paths_imu.append(path)
 
     ts_sess, x_sess = optk.data.load_imu(

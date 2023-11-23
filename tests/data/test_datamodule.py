@@ -3,60 +3,114 @@ from typing import Dict, Optional
 
 import openpack_toolkit as optk
 import pytest
+import yaml
 from omegaconf import OmegaConf
 
 from openpack_torch.data.datamodule import OpenPackBaseDataModule
 from openpack_torch.data.datasets import OpenPackImu as OpenPackImuDataset
 
+_ATR02_IMU_STREAM_YAML = """
+kind: dataset/stream/multimodal
+name: atr02-iot
+mdetadata:
+  labels:
+    app: openpack-benchmarks
+    version: 1.0.0
+    multimodal: true
+spec:
+  imu:
+    kind: dataset/stream/imu
+    path:
+      dir: ${path.openpack.rootdir}/${user.name}/atr/${device}
+      fname: ${session}.csv
+      full_path: ${.dir}/${.fname}
+    devices:
+      - "atr01"
+      - "atr02"
+      - "atr03"
+      - "atr04"
+    acc: true
+    gyro: false
+    quat: false
+"""
+
 
 @pytest.fixture
-def opcfg():
+def atr02_imu_stream_cfg():
+    cfg = yaml.safe_load(_ATR02_IMU_STREAM_YAML)
+    return OmegaConf.create(cfg)
+
+
+@pytest.fixture
+def opcfg(atr02_imu_stream_cfg):
     rootdir = Path(__file__).parents[2] / "samples/openpack/${.version}"
 
-    cfg = OmegaConf.create({
-        "path": {
-            "openpack": {
-                "version": optk.SAMPLE_DATASET_VERSION,
-                "rootdir": str(rootdir),
-            }
-        },
-        "dataset": {
-            "stream": optk.configs.datasets.streams.ATR_ACC_STREAM,
-            "annotation": optk.configs.datasets.annotations.OPENPACK_OPERATIONS_1HZ_ANNOTATION,
-            "split": {
-                "name": "unit-test",
-                "train": [("U0209", "S0500")],
-                "val": [("U0209", "S0500")],
-                "test": [("U0209", "S0500")],
-                "submission": [("U0209", "S0500")],
+    cfg = OmegaConf.create(
+        {
+            "path": {
+                "openpack": {
+                    "version": optk.SAMPLE_DATASET_VERSION,
+                    "rootdir": str(rootdir),
+                }
             },
-        },
-        "train": {
-            "window": 30 * 60,
-            "batch_size": 32,
-            "num_workers": 3,
-            "debug": {
-                "batch_size": 2,
+            "dataset": {
+                "stream": atr02_imu_stream_cfg,
+                "annotation": {
+                    "name": "openpack-operations-1hz-annotation",
+                    "metadata": {
+                        "labels": {
+                            "type": "annotation/operation",
+                            "version": "v3.5.0",
+                            "dependency": "openpack-operations",
+                            "resolution": "1Hz",
+                        }
+                    },
+                    "spec": {
+                        "path": {
+                            "dir": "${path.openpack.rootdir}/${user.name}/annotation/openpack-operations-1hz",
+                            "fname": "${session}.csv",
+                        }
+                    },
+                },
+                "split": {
+                    "name": "unit-test",
+                    "train": [("U0209", "S0500")],
+                    "val": [("U0209", "S0500")],
+                    "test": [("U0209", "S0500")],
+                    "submission": [("U0209", "S0500")],
+                },
             },
-        },
-        "debug": False,
-    })
+            "train": {
+                "window": 30 * 60,
+                "batch_size": 32,
+                "num_workers": 3,
+                "random_crop": True,
+                "debug": {
+                    "batch_size": 2,
+                },
+            },
+            "debug": False,
+        }
+    )
     return cfg
+
 
 # ------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("stage, debug", (
-    (None, True),
-    (None, False),
-    ("fit", False),
-    ("validate", False),
-    ("test", False),
-    ("submission", False),
-    ("test-on-submission", False),
-))
+@pytest.mark.parametrize(
+    "stage, debug",
+    (
+        (None, True),
+        (None, False),
+        ("fit", False),
+        ("validate", False),
+        ("test", False),
+        ("submission", False),
+        ("test-on-submission", False),
+    ),
+)
 def test_OpenPackBaseDataModule__01(opcfg, stage, debug):
-
     class TestDataModule(OpenPackBaseDataModule):
         dataset_class = OpenPackImuDataset
 
