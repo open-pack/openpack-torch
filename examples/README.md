@@ -17,13 +17,13 @@ python run_dcl.py mode=test-on-submission debug=false
 
 ### Tutorial: Modeling of Time-series
 
-#### (English Ver.) [Tutorial_Basics_of_Modeling.ipynb](./notebooks/Tutorial_Basics_of_Modeling.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/deep-conv-lstm/notebooks/Tutorial_Basics_of_Modeling.ipynb)
+#### (English Ver.) [Tutorial_Basics_of_Modeling.ipynb](./notebooks/Tutorial_Basics_of_Modeling.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/notebooks/Tutorial_Basics_of_Modeling.ipynb)
 
 This notebook was created as a tutorial for participants of the OpenPack Challenge 2022, a work activity recognition competition to be held at the Percom 2023 Workshop BiRD.
 This tutorial will (1) provide an overview of OpenPack dataset and its tasks, and (2) run a sample program of an activity recognition model.
 Let's learn how to capture the characteristics of OpenPack dataset data and learn the concept of modeling to recognize the work activities of packaging.
 
-#### (日本語版) [Tutorial_Basics_of_Modeling\_\_JA.ipynb](./notebooks/Tutorial_Basics_of_Modeling__JA.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/deep-conv-lstm/notebooks/Tutorial_Basics_of_Modeling__JA.ipynb)
+#### (日本語版) [Tutorial_Basics_of_Modeling\_\_JA.ipynb](./notebooks/Tutorial_Basics_of_Modeling__JA.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/notebooks/Tutorial_Basics_of_Modeling__JA.ipynb)
 
 このノートブックは， Percom 2023 Workshop BiRD で開催される行動認識コンペティション 「OpenPack Challenge 2022」の参加者用チュートリアルとして作成しました．
 このチュートリアルでは，(1) OpenPack の概要とタスクの説明，(2) 行動認識モデルのサンプルプログラムの実行を行います．
@@ -39,9 +39,9 @@ OpenPack データセットのデータの性質を捉え， 梱包作業とい�
 
 #### [U-Net_Train-Model-and-Make-Submission-File.ipynb](./notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/unet/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/unet/notebooks/U-Net_Train-Model-and-Make-Submission-File__JA.ipynb) (日本語版)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/notebooks/U-Net_Train-Model-and-Make-Submission-File__JA.ipynb) (日本語版)
 
 This is a tutorial of OpenPack Challenge 2022.
 In this notebook, we will build the U-Net, one of the basic architecture for segmentation, with the acceleration data from the left wrist (atr01).

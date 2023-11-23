@@ -25,28 +25,30 @@ poetry add  openpack-torch
 
 ## Examples
 
+See [./examples/README.md](./examples/)
+
 ### Operation Recognition (Semantic Segmentation)
 
 #### IMU
 
 - Acceleration
-  - [U-Net](./examples/unet/)
-  - [DeepConvLSTM](./examples/deep-conv-lstm/)
+  - [U-Net](./examples/run_unet.py) ([PyTorch Model](./openpack_torch/models/imu/unet.py))
+  - [DeepConvLSTM](./examples/run_dcl.py) ([PyTorch Model](./openpack_torch/models/imu/deep_conv_lstm.py))
 
 #### Vision
 
 - Keypoints
-  - [ST-GCN](./examples/st-gcn)
+  - [ST-GCN](./examples/run_stgcn.py) ([PyTorch Model](./openpack_torch/models/keypoint/stgcn.py))
 
 #### Scores of Baseline Moodel (Preliminary Experiments)
 
 ##### Split: Pilot Challenge
 
-| Model                    | F1 (Test Set) | F1 (Submission Set) | Date       | Code |
-|--------------------------|---------------|---------------------|------------|------|
-| UNet                     | 0.3451        | 0.3747              | 2022-06-28 | [main.py](./examples/unet/main.py) |
-| DeepConvLSTM             | 0.7081        | 0.7695              | 2022-06-28 | [main.py](./examples/deep-conv-lstm/main.py) |
-| ST-GCN                   | 0.7024        | 0.6106              | 2022-07-07 | [main.py](./examples/st-gcn/main.py) |
+| Model        | F1 (Test Set) | F1 (Submission Set) | Date       | Code                                    |
+| ------------ | ------------- | ------------------- | ---------- | --------------------------------------- |
+| UNet         | 0.3451        | 0.3747              | 2022-06-28 | [run_unet.py](./examples/run_unet.py)   |
+| DeepConvLSTM | 0.7081        | 0.7695              | 2022-06-28 | [run_dcl.py](./examples/run_dcl.py)     |
+| ST-GCN       | 0.7024        | 0.6106              | 2022-07-07 | [run_stgcn.py](./examples/run_stgcn.py) |
 
 NOTE: F1 = F1-measure (macro average)
 
@@ -54,11 +56,11 @@ NOTE: F1 = F1-measure (macro average)
 
 This split is defined for OpenPack Challenge 2022.
 
-| Model                    | F1 (Test Set) | F1 (Submission Set) | Date       | Code |
-|--------------------------|---------------|---------------------|------------|------|
-| UNet                     | TBA           | TBA                 | -          | -    |
-| DeepConvLSTM             | TBA           | TBA                 | -          | -    |
-| ST-GCN                   | TBA           | TBA                 | -          | -    |
+| Model        | F1 (Test Set) | F1 (Submission Set) | Date | Code |
+| ------------ | ------------- | ------------------- | ---- | ---- |
+| UNet         | TBA           | TBA                 | -    | -    |
+| DeepConvLSTM | TBA           | TBA                 | -    | -    |
+| ST-GCN       | TBA           | TBA                 | -    | -    |
 
 ## OpenPack Challenge 2022 @ PerCom2023 WS Bird
 
@@ -68,8 +70,8 @@ Please join this exciting opportunity. For more information about the competitio
 
 ### Tutorials
 
-- [Train a baseline model and make submission file.](./examples/unet/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/unet/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
-- Change input modalities. (coming soon ...)
+- [Train a baseline model and make submission file.](./examples/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/notebooks/U-Net_Train-Model-and-Make-Submission-File.ipynb)
+- [Change input modalities.](./examples/notebooks/U-Net_Change-Input-Data.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/open-pack/openpack-torch/blob/main/examples/notebooks/U-Net_Change-Input-Data.ipynb)
 
 ![OpenPack Challenge Logo](./assets/img/OpenPackCHALLENG-black.png)
 
