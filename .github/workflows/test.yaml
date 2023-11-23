@@ -27,5 +27,5 @@ jobs:
         run: |
           poetry install
           export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
-          poetry run pytest --cov ./tests/
+          poetry run pytest --cov --ignore=openpack_torch/utils/test_helper.py
         shell: bash
