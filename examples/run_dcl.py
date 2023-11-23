@@ -3,18 +3,10 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import hydra
-import numpy as np
 import openpack_toolkit as optk
-import pandas as pd
 import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig, OmegaConf
-from openpack_toolkit import OPENPACK_OPERATIONS
-from openpack_toolkit.codalab.operation_segmentation import (
-    construct_submission_dict,
-    eval_operation_segmentation_wrapper,
-    make_submission_zipfile,
-)
 
 import openpack_torch as optorch
 from openpack_torch.lightning import EarlyStopError
@@ -147,7 +139,6 @@ def test(cfg: DictConfig, mode: str = "test"):
     device = torch.device("cuda")
     logdir = Path(cfg.path.logdir.rootdir)
 
-    # datamodule = init_datamodule(cfg)
     datamodule = OpenPackImuDataModule(cfg)
     datamodule.setup(mode)
 

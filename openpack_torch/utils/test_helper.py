@@ -1,9 +1,7 @@
 from logging import getLogger
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
-import openpack_toolkit as optk
 import pandas as pd
 import pytorch_lightning as pl
 from omegaconf import DictConfig
@@ -199,6 +197,7 @@ def test_helper(
                 }
             )
 
+    df_summary = None
     if cfg.metadata.labels.benchmarkType == "benchmark1":
         if mode in ("test", "test-on-submission"):
             split = [k.split("-") for k in outputs.keys()]
@@ -278,6 +277,8 @@ def test_helper(
             pd.set_option("display.max_columns", None)
             pd.set_option("display.width", 200)
             logger.info(f"df_summary:\n{df_summary.tail(15)}")
+
+    return outputs, df_summary
 
 
 def compute_score_for_each_scenario(cfg, classes, split, outputs):

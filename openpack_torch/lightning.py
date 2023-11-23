@@ -167,3 +167,7 @@ class BaseLightningModule(pl.LightningModule):
             results[key] = np.concatenate(results[key], axis=0)
 
         self.test_results = results
+
+    def clear_test_outputs(self):
+        self.test_step_outputs = []
+        self.test_results = None
