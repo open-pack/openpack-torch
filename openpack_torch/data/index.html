@@ -46,6 +46,14 @@ __all__ = [
 <dd>
 <div class="desc"><p>Dataset Class for OpenPack dataset.</p></div>
 </dd>
+<dt><code class="name"><a title="openpack_torch.data.preprocessing" href="preprocessing.html">openpack_torch.data.preprocessing</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt><code class="name"><a title="openpack_torch.data.utils" href="utils.html">openpack_torch.data.utils</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
 </dl>
 </section>
 <section>
@@ -100,6 +108,7 @@ Default value is False.</p></div>
         batch_size (int): batch size.
         debug (bool): If True, enable debug mode.
     &#34;&#34;&#34;
+
     dataset_class: torch.utils.data.Dataset
 
     def __init__(self, cfg: DictConfig):
@@ -132,7 +141,11 @@ Default value is False.</p></div>
         Returns:
             Dict:
         &#34;&#34;&#34;
-        raise NotImplementedError()
+        kwargs = {
+            &#34;window&#34;: self.cfg.train.window,
+            &#34;debug&#34;: self.cfg.debug,
+        }
+        return kwargs
 
     def _init_datasets(
         self,
@@ -153,15 +166,22 @@ Default value is False.</p></div>
         for user, session in user_session:
             key = f&#34;{user}-{session}&#34;
             datasets[key] = self.dataset_class(
-                copy.deepcopy(self.cfg), [(user, session)], **kwargs)
+                copy.deepcopy(self.cfg), [(user, session)], **kwargs
+            )
         return datasets
 
     def setup(self, stage: Optional[str] = None) -&gt; None:
-        split = self.cfg.dataset.split
+        if hasattr(self.cfg.dataset.split, &#34;spec&#34;):
+            split = self.cfg.dataset.split.spec
+        else:
+            split = self.cfg.dataset.split
 
         if stage in (None, &#34;fit&#34;):
             kwargs = self.get_kwargs_for_datasets(stage=&#34;train&#34;)
             self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
+            if self.cfg.train.random_crop:
+                self.op_train.random_crop = True
+                log.debug(f&#34;enable random_crop in training dataset: {self.op_train}&#34;)
         else:
             self.op_train = None
 
@@ -187,17 +207,18 @@ Default value is False.</p></div>
         else:
             self.op_submission = None
 
-        logger.info(f&#34;dataset[train]: {self.op_train}&#34;)
-        logger.info(f&#34;dataset[val]: {self.op_val}&#34;)
-        logger.info(f&#34;dataset[test]: {self.op_test}&#34;)
-        logger.info(f&#34;dataset[submission]: {self.op_submission}&#34;)
+        log.info(f&#34;dataset[train]: {self.op_train}&#34;)
+        log.info(f&#34;dataset[val]: {self.op_val}&#34;)
+        log.info(f&#34;dataset[test]: {self.op_test}&#34;)
+        log.info(f&#34;dataset[submission]: {self.op_submission}&#34;)
 
     def train_dataloader(self) -&gt; DataLoader:
         return DataLoader(
             self.op_train,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=self.cfg.train.num_workers)
+            num_workers=self.cfg.train.num_workers,
+        )
 
     def val_dataloader(self) -&gt; List[DataLoader]:
         dataloaders = []
@@ -207,7 +228,8 @@ Default value is False.</p></div>
                     dataset,
                     batch_size=self.batch_size,
                     shuffle=False,
-                    num_workers=self.cfg.train.num_workers)
+                    num_workers=self.cfg.train.num_workers,
+                )
             )
         return dataloaders
 
@@ -219,7 +241,8 @@ Default value is False.</p></div>
                     dataset,
                     batch_size=self.batch_size,
                     shuffle=False,
-                    num_workers=self.cfg.train.num_workers)
+                    num_workers=self.cfg.train.num_workers,
+                )
             )
         return dataloaders
 
@@ -231,7 +254,8 @@ Default value is False.</p></div>
                     dataset,
                     batch_size=self.batch_size,
                     shuffle=False,
-                    num_workers=self.cfg.train.num_workers)
+                    num_workers=self.cfg.train.num_workers,
+                )
             )
         return dataloaders</code></pre>
 </details>
@@ -240,6 +264,10 @@ Default value is False.</p></div>
 <li>pytorch_lightning.core.datamodule.LightningDataModule</li>
 <li>pytorch_lightning.core.hooks.DataHooks</li>
 <li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
+</ul>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="openpack_torch.data.datamodule.OpenPackBaseFlexSetDataModule" href="datamodule.html#openpack_torch.data.datamodule.OpenPackBaseFlexSetDataModule">OpenPackBaseFlexSetDataModule</a></li>
 </ul>
 <h3>Class variables</h3>
 <dl>
@@ -295,16 +323,20 @@ Default value is False.</p></div>
     Returns:
         Dict:
     &#34;&#34;&#34;
-    raise NotImplementedError()</code></pre>
+    kwargs = {
+        &#34;window&#34;: self.cfg.train.window,
+        &#34;debug&#34;: self.cfg.debug,
+    }
+    return kwargs</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.data.OpenPackBaseDataModule.setup"><code class="name flex">
 <span>def <span class="ident">setup</span></span>(<span>self, stage: Optional[str] = None) ‑> None</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Called at the beginning of fit (train + validate), validate, test, or predict. This is a good hook when
-you need to build models dynamically or adjust something about them. This hook is called on every process
-when using DDP.</p>
+<div class="desc"><p>Called at the beginning of fit (train + validate), validate, test, or predict. This is a good hook when you
+need to build models dynamically or adjust something about them. This hook is called on every process when
+using DDP.</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>stage</code></strong></dt>
@@ -331,11 +363,17 @@ when using DDP.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def setup(self, stage: Optional[str] = None) -&gt; None:
-    split = self.cfg.dataset.split
+    if hasattr(self.cfg.dataset.split, &#34;spec&#34;):
+        split = self.cfg.dataset.split.spec
+    else:
+        split = self.cfg.dataset.split
 
     if stage in (None, &#34;fit&#34;):
         kwargs = self.get_kwargs_for_datasets(stage=&#34;train&#34;)
         self.op_train = self.dataset_class(self.cfg, split.train, **kwargs)
+        if self.cfg.train.random_crop:
+            self.op_train.random_crop = True
+            log.debug(f&#34;enable random_crop in training dataset: {self.op_train}&#34;)
     else:
         self.op_train = None
 
@@ -361,10 +399,10 @@ when using DDP.</p>
     else:
         self.op_submission = None
 
-    logger.info(f&#34;dataset[train]: {self.op_train}&#34;)
-    logger.info(f&#34;dataset[val]: {self.op_val}&#34;)
-    logger.info(f&#34;dataset[test]: {self.op_test}&#34;)
-    logger.info(f&#34;dataset[submission]: {self.op_submission}&#34;)</code></pre>
+    log.info(f&#34;dataset[train]: {self.op_train}&#34;)
+    log.info(f&#34;dataset[val]: {self.op_val}&#34;)
+    log.info(f&#34;dataset[test]: {self.op_test}&#34;)
+    log.info(f&#34;dataset[submission]: {self.op_submission}&#34;)</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.data.OpenPackBaseDataModule.submission_dataloader"><code class="name flex">
@@ -384,7 +422,8 @@ when using DDP.</p>
                 dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=self.cfg.train.num_workers)
+                num_workers=self.cfg.train.num_workers,
+            )
         )
     return dataloaders</code></pre>
 </details>
@@ -393,7 +432,8 @@ when using DDP.</p>
 <span>def <span class="ident">test_dataloader</span></span>(<span>self) ‑> List[torch.utils.data.dataloader.DataLoader]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Implement one or multiple PyTorch DataLoaders for testing.</p>
+<div class="desc"><p>An iterable or collection of iterables specifying test samples.</p>
+<p>For more information about multiple dataloaders, see this :ref:<code>section &lt;multiple-dataloaders&gt;</code>.</p>
 <p>For data processing use the following pattern:</p>
 <pre><code>- download in :meth:&lt;code&gt;prepare\_data&lt;/code&gt;
 - process and split in :meth:&lt;code&gt;setup&lt;/code&gt;
@@ -408,34 +448,11 @@ when using DDP.</p>
 <li>:meth:<code>setup</code></li>
 </ul>
 <h2 id="note">Note</h2>
-<p>Lightning adds the correct sampler for distributed and arbitrary hardware.
+<p>Lightning tries to add the correct sampler for distributed and arbitrary hardware.
 There is no need to set it yourself.</p>
-<h2 id="return">Return</h2>
-<p>A :class:<code>torch.utils.data.DataLoader</code> or a sequence of them specifying testing samples.</p>
-<p>Example::</p>
-<pre><code>def test_dataloader(self):
-    transform = transforms.Compose([transforms.ToTensor(),
-                                    transforms.Normalize((0.5,), (1.0,))])
-    dataset = MNIST(root='/path/to/mnist/', train=False, transform=transform,
-                    download=True)
-    loader = torch.utils.data.DataLoader(
-        dataset=dataset,
-        batch_size=self.batch_size,
-        shuffle=False
-    )
-
-    return loader
-
-# can also return multiple dataloaders
-def test_dataloader(self):
-    return [loader_a, loader_b, ..., loader_n]
-</code></pre>
 <h2 id="note_1">Note</h2>
 <p>If you don't need a test dataset and a :meth:<code>test_step</code>, you don't need to implement
-this method.</p>
-<h2 id="note_2">Note</h2>
-<p>In the case where you return multiple test dataloaders, the :meth:<code>test_step</code>
-will have an argument <code>dataloader_idx</code> which matches the order here.</p></div>
+this method.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -448,7 +465,8 @@ will have an argument <code>dataloader_idx</code> which matches the order here.<
                 dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=self.cfg.train.num_workers)
+                num_workers=self.cfg.train.num_workers,
+            )
         )
     return dataloaders</code></pre>
 </details>
@@ -457,12 +475,10 @@ will have an argument <code>dataloader_idx</code> which matches the order here.<
 <span>def <span class="ident">train_dataloader</span></span>(<span>self) ‑> torch.utils.data.dataloader.DataLoader</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Implement one or more PyTorch DataLoaders for training.</p>
-<h2 id="return">Return</h2>
-<p>A collection of :class:<code>torch.utils.data.DataLoader</code> specifying training samples.
-In the case of multiple dataloaders, please see this :ref:<code>section &lt;multiple-dataloaders&gt;</code>.</p>
+<div class="desc"><p>An iterable or collection of iterables specifying training samples.</p>
+<p>For more information about multiple dataloaders, see this :ref:<code>section &lt;multiple-dataloaders&gt;</code>.</p>
 <p>The dataloader you return will not be reloaded unless you set
-:paramref:<code>~pytorch_lightning.trainer.Trainer.reload_dataloaders_every_n_epochs</code> to
+:paramref:<code>~pytorch_lightning.trainer.trainer.Trainer.reload_dataloaders_every_n_epochs</code> to
 a positive integer.</p>
 <p>For data processing use the following pattern:</p>
 <pre><code>- download in :meth:&lt;code&gt;prepare\_data&lt;/code&gt;
@@ -478,48 +494,8 @@ a positive integer.</p>
 <li>:meth:<code>setup</code></li>
 </ul>
 <h2 id="note">Note</h2>
-<p>Lightning adds the correct sampler for distributed and arbitrary hardware.
-There is no need to set it yourself.</p>
-<p>Example::</p>
-<pre><code># single dataloader
-def train_dataloader(self):
-    transform = transforms.Compose([transforms.ToTensor(),
-                                    transforms.Normalize((0.5,), (1.0,))])
-    dataset = MNIST(root='/path/to/mnist/', train=True, transform=transform,
-                    download=True)
-    loader = torch.utils.data.DataLoader(
-        dataset=dataset,
-        batch_size=self.batch_size,
-        shuffle=True
-    )
-    return loader
-
-# multiple dataloaders, return as list
-def train_dataloader(self):
-    mnist = MNIST(...)
-    cifar = CIFAR(...)
-    mnist_loader = torch.utils.data.DataLoader(
-        dataset=mnist, batch_size=self.batch_size, shuffle=True
-    )
-    cifar_loader = torch.utils.data.DataLoader(
-        dataset=cifar, batch_size=self.batch_size, shuffle=True
-    )
-    # each batch will be a list of tensors: [batch_mnist, batch_cifar]
-    return [mnist_loader, cifar_loader]
-
-# multiple dataloader, return as dict
-def train_dataloader(self):
-    mnist = MNIST(...)
-    cifar = CIFAR(...)
-    mnist_loader = torch.utils.data.DataLoader(
-        dataset=mnist, batch_size=self.batch_size, shuffle=True
-    )
-    cifar_loader = torch.utils.data.DataLoader(
-        dataset=cifar, batch_size=self.batch_size, shuffle=True
-    )
-    # each batch will be a dict of tensors: {'mnist': batch_mnist, 'cifar': batch_cifar}
-    return {'mnist': mnist_loader, 'cifar': cifar_loader}
-</code></pre></div>
+<p>Lightning tries to add the correct sampler for distributed and arbitrary hardware.
+There is no need to set it yourself.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -529,16 +505,18 @@ def train_dataloader(self):
         self.op_train,
         batch_size=self.batch_size,
         shuffle=True,
-        num_workers=self.cfg.train.num_workers)</code></pre>
+        num_workers=self.cfg.train.num_workers,
+    )</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.data.OpenPackBaseDataModule.val_dataloader"><code class="name flex">
 <span>def <span class="ident">val_dataloader</span></span>(<span>self) ‑> List[torch.utils.data.dataloader.DataLoader]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Implement one or multiple PyTorch DataLoaders for validation.</p>
+<div class="desc"><p>An iterable or collection of iterables specifying validation samples.</p>
+<p>For more information about multiple dataloaders, see this :ref:<code>section &lt;multiple-dataloaders&gt;</code>.</p>
 <p>The dataloader you return will not be reloaded unless you set
-:paramref:<code>~pytorch_lightning.trainer.Trainer.reload_dataloaders_every_n_epochs</code> to
+:paramref:<code>~pytorch_lightning.trainer.trainer.Trainer.reload_dataloaders_every_n_epochs</code> to
 a positive integer.</p>
 <p>It's recommended that all data downloads and preparation happen in :meth:<code>prepare_data</code>.</p>
 <ul>
@@ -548,34 +526,11 @@ a positive integer.</p>
 <li>:meth:<code>setup</code></li>
 </ul>
 <h2 id="note">Note</h2>
-<p>Lightning adds the correct sampler for distributed and arbitrary hardware
+<p>Lightning tries to add the correct sampler for distributed and arbitrary hardware
 There is no need to set it yourself.</p>
-<h2 id="return">Return</h2>
-<p>A :class:<code>torch.utils.data.DataLoader</code> or a sequence of them specifying validation samples.</p>
-<p>Examples::</p>
-<pre><code>def val_dataloader(self):
-    transform = transforms.Compose([transforms.ToTensor(),
-                                    transforms.Normalize((0.5,), (1.0,))])
-    dataset = MNIST(root='/path/to/mnist/', train=False,
-                    transform=transform, download=True)
-    loader = torch.utils.data.DataLoader(
-        dataset=dataset,
-        batch_size=self.batch_size,
-        shuffle=False
-    )
-
-    return loader
-
-# can also return multiple dataloaders
-def val_dataloader(self):
-    return [loader_a, loader_b, ..., loader_n]
-</code></pre>
 <h2 id="note_1">Note</h2>
 <p>If you don't need a validation dataset and a :meth:<code>validation_step</code>, you don't need to
-implement this method.</p>
-<h2 id="note_2">Note</h2>
-<p>In the case where you return multiple validation dataloaders, the :meth:<code>validation_step</code>
-will have an argument <code>dataloader_idx</code> which matches the order here.</p></div>
+implement this method.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -588,7 +543,8 @@ will have an argument <code>dataloader_idx</code> which matches the order here.<
                 dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=self.cfg.train.num_workers)
+                num_workers=self.cfg.train.num_workers,
+            )
         )
     return dataloaders</code></pre>
 </details>
@@ -613,6 +569,8 @@ will have an argument <code>dataloader_idx</code> which matches the order here.<
 <ul>
 <li><code><a title="openpack_torch.data.datamodule" href="datamodule.html">openpack_torch.data.datamodule</a></code></li>
 <li><code><a title="openpack_torch.data.datasets" href="datasets.html">openpack_torch.data.datasets</a></code></li>
+<li><code><a title="openpack_torch.data.preprocessing" href="preprocessing.html">openpack_torch.data.preprocessing</a></code></li>
+<li><code><a title="openpack_torch.data.utils" href="utils.html">openpack_torch.data.utils</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>

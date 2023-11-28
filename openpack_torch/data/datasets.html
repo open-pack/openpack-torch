@@ -30,21 +30,59 @@
 <pre><code class="python">&#34;&#34;&#34;Dataset Class for OpenPack dataset.
 &#34;&#34;&#34;
 from logging import getLogger
-from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
 import openpack_toolkit as optk
 import torch
 from omegaconf import DictConfig, open_dict
-from openpack_toolkit import OPENPACK_OPERATIONS
 
-logger = getLogger(__name__)
+from ._baseclass import Sequence, SequenceSet, Window
+from ._wrapper import (
+    load_annot_wrapper,
+    load_imu_wrapper,
+    load_iot_data_wrapper,
+    load_kinect_2d_kpt_wrapper,
+)
+from .preprocessing import compute_semantic_hard_boundary
+
+log = getLogger(__name__)
+
+
+def random_window_shift(win: Window, win_size: int, seq_len: int) -&gt; Window:
+    &#34;&#34;&#34;Change cropping position up to 50%.
+
+    Args:
+        seq_len (int): length of whole sequence.
+    &#34;&#34;&#34;
+    start = win.start
+    stop = start + win_size
+    if stop &gt;= seq_len:
+        stop = seq_len
+
+    shift = int(np.random.uniform(-1, 1, size=(1,)) * ((stop - start) / 2))
+    new_start, new_stop = start + shift, stop + shift
+
+    if new_start &lt; 0:
+        new_start = 0
+    if new_stop &gt;= seq_len:
+        new_stop = seq_len
+
+    if new_start &gt; new_stop:
+        raise ValueError(
+            f&#34;start={start}, stop={stop} &#34;
+            f&#34;-&gt; new_start={new_start}, new_stop={new_stop} (shift={shift})&#34;
+        )
+
+    new_win = Window(win.sequence_idx, win.segment_idx, new_start, new_stop)
+    return new_win
+
+
+# -----------------------------------------------------------------------------
 
 
 class OpenPackImu(torch.utils.data.Dataset):
     &#34;&#34;&#34;Dataset class for IMU data.
-
     Attributes:
         data (List[Dict]): each sequence is stored in dict. The dict has 5 keys (i.e.,
             user, session, data, label(=class index), unixtime). data is a np.ndarray with
@@ -57,25 +95,50 @@ class OpenPackImu(torch.utils.data.Dataset):
         debug (bool): If True, enable debug mode. Default to False.
         submission (bool): Set True when you make submission file. Annotation data will not be
             loaded and dummy data will be generated. Default to False.
-
     Todo:
         * Make a minimum copy of cfg (DictConfig) before using in ``load_dataset()``.
         * Add method for parameter validation (i.e., assert).
     &#34;&#34;&#34;
+
     data: List[Dict] = None
     index: Tuple[Dict] = None
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;squeeze&#34;: True,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
 
     def __init__(
-            self,
-            cfg: DictConfig,
-            user_session_list: Tuple[Tuple[int, int], ...],
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
-            window: int = 30 * 60,
-            submission: bool = False,
-            debug: bool = False,
+        self,
+        cfg: DictConfig,
+        user_session_list: Tuple[Tuple[int, int], ...] = None,
+        classes: optk.ActSet = None,
+        window: int = 30 * 60,
+        random_crop=False,
+        submission: bool = False,
+        debug: bool = False,
     ) -&gt; None:
         &#34;&#34;&#34;Initialize OpenPackImu dataset class.
-
         Args:
             cfg (DictConfig): instance of ``optk.configs.OpenPackConfig``. path, dataset, and
                 annotation attributes must be initialized.
@@ -89,18 +152,42 @@ class OpenPackImu(torch.utils.data.Dataset):
             debug (bool, optional): enable debug mode. Defaults to False.
         &#34;&#34;&#34;
         super().__init__()
+        self.cfg = cfg
         self.classes = classes
         self.window = window
         self.submission = submission
         self.debug = debug
+        self.random_crop = random_crop
 
-        self.load_dataset(
-            cfg,
-            user_session_list,
-            window,
-            submission=submission)
+        if self.classes is None:
+            class_set_key = cfg.dataset.annotation.name.replace(&#34;-&#34;, &#34;_&#34;).upper()
+            classes_tuple = eval(
+                f&#34;optk.configs.datasets.annotations.{class_set_key}&#34;
+            ).classes
+            self.classes = optk.ActSet(classes_tuple)
 
-        self.preprocessing()
+        if user_session_list is not None:
+            self.load_dataset(cfg, user_session_list, window, submission=submission)
+            self.preprocessing()
+
+    def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+        data_seq = dict()
+        data_seq[&#34;imu&#34;] = load_imu_wrapper(cfg)
+        base_unixtime_seq = data_seq[&#34;imu&#34;].unixtime
+
+        labels_seq = dict()
+        labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+            cfg, base_unixtime_seq, submission, self.classes
+        )
+
+        ss = SequenceSet(
+            user=cfg.user.name,
+            session=cfg.session,
+            data=data_seq,
+            labels=labels_seq,
+            primary_seqence=&#34;imu&#34;,
+        )
+        return ss
 
     def load_dataset(
         self,
@@ -110,7 +197,6 @@ class OpenPackImu(torch.utils.data.Dataset):
         submission: bool = False,
     ) -&gt; None:
         &#34;&#34;&#34;Called in ``__init__()`` and load required data.
-
         Args:
             user_session (Tuple[Tuple[str, str], ...]): _description_
             window (int, optional): _description_. Defaults to None.
@@ -121,59 +207,55 @@ class OpenPackImu(torch.utils.data.Dataset):
             with open_dict(cfg):
                 cfg.user = {&#34;name&#34;: user}
                 cfg.session = session
+            ss = self.load_single_session(cfg, submission)
 
-            paths_imu = []
-            for device in cfg.dataset.stream.devices:
-                with open_dict(cfg):
-                    cfg.device = device
+            data.append(ss)
+            index += [
+                Window(seq_idx, seg_idx, start, start + window)
+                for seg_idx, start in enumerate(range(0, ss.seq_len(), window))
+            ]
 
-                path = Path(
-                    cfg.dataset.stream.path.dir,
-                    cfg.dataset.stream.path.fname
-                )
-                paths_imu.append(path)
-
-            ts_sess, x_sess = optk.data.load_imu(
-                paths_imu,
-                use_acc=cfg.dataset.stream.acc,
-                use_gyro=cfg.dataset.stream.gyro,
-                use_quat=cfg.dataset.stream.quat)
-
-            if submission:
-                # For set dummy data.
-                label = np.zeros((len(ts_sess),), dtype=np.int64)
-            else:
-                path = Path(
-                    cfg.dataset.annotation.path.dir,
-                    cfg.dataset.annotation.path.fname
-                )
-                df_label = optk.data.load_and_resample_operation_labels(
-                    path, ts_sess, classes=self.classes)
-                label = df_label[&#34;act_idx&#34;].values
-
-            data.append({
-                &#34;user&#34;: user,
-                &#34;session&#34;: session,
-                &#34;data&#34;: x_sess,
-                &#34;label&#34;: label,
-                &#34;unixtime&#34;: ts_sess,
-            })
-
-            seq_len = ts_sess.shape[0]
-            index += [dict(seq=seq_idx, seg=seg_idx, pos=pos)
-                      for seg_idx, pos in enumerate(range(0, seq_len, window))]
         self.data = data
         self.index = tuple(index)
 
     def preprocessing(self) -&gt; None:
-        &#34;&#34;&#34;This method is called after ``load_dataset()`` and apply preprocessing to loaded data.
         &#34;&#34;&#34;
-        logger.warning(&#34;No preprocessing is applied.&#34;)
+        * Normalize [-3G, +3G] into [0, 1].
+        &#34;&#34;&#34;
+        # NOTE: Normalize ACC data. ([-3G, +3G] -&gt; [0, 1])
+        # NOTE: Described in Appendix Sec.3.2.
+        is_agq = (
+            self.cfg.dataset.stream.spec.imu.gyro
+            and self.cfg.dataset.stream.spec.imu.quat
+        )
+        devices = self.cfg.dataset.stream.spec.imu.devices
+
+        for ss in self.data:
+            x = ss.data.get(&#34;imu&#34;).data
+            if is_agq:
+                for i, device in enumerate(devices):
+                    # ACC
+                    dims = [10 * i + 0, 10 * i + 1, 10 * i + 2]
+                    x[dims] = np.clip(x[dims], -3, +3)
+                    x[dims] = (x[dims] + 3.0) / 6.0
+                    # Gyro
+                    for j, ch in enumerate([&#34;x&#34;, &#34;y&#34;, &#34;z&#34;]):
+                        dim = 10 * i + (3 + j)
+                        mean = (
+                            self.cfg.dataset.stream.spec.imu.stats[device].gyro[ch].mean
+                        )
+                        std = (
+                            self.cfg.dataset.stream.spec.imu.stats[device].gyro[ch].std
+                        )
+                        x[dim] = (x[dim] - mean) / std
+            else:
+                x = np.clip(x, -3, +3)
+                x = (x + 3.0) / 6.0
+            ss.data.get(&#34;imu&#34;).data = x
 
     @property
     def num_classes(self) -&gt; int:
         &#34;&#34;&#34;Returns the number of classes
-
         Returns:
             int
         &#34;&#34;&#34;
@@ -184,7 +266,8 @@ class OpenPackImu(torch.utils.data.Dataset):
             &#34;OpenPackImu(&#34;
             f&#34;index={len(self.index)}, &#34;
             f&#34;num_sequence={len(self.data)}, &#34;
-            f&#34;submission={self.submission}&#34;
+            f&#34;submission={self.submission}, &#34;
+            f&#34;random_crop={self.random_crop}&#34;
             &#34;)&#34;
         )
         return s
@@ -196,201 +279,238 @@ class OpenPackImu(torch.utils.data.Dataset):
         return self
 
     def __getitem__(self, index: int) -&gt; Dict:
-        seq_idx, seg_idx = self.index[index][&#34;seq&#34;], self.index[index][&#34;seg&#34;]
-        seq_dict = self.data[seq_idx]
-        seq_len = seq_dict[&#34;data&#34;].shape[1]
+        win = self.index[index]
+        ss = self.data[win.sequence_idx]
 
-        head = seg_idx * self.window
-        tail = (seg_idx + 1) * self.window
-        if tail &gt;= seq_len:
-            pad_tail = tail - seq_len
-            tail = seq_len
-        else:
-            pad_tail = 0
-        assert (
-            head &gt;= 0) and (
-            tail &gt; head) and (
-            tail &lt;= seq_len), f&#34;head={head}, tail={tail}&#34;
+        # TODO: Implement  Random crop
+        if self.random_crop:
+            win = random_window_shift(win, self.window, len(ss))
 
-        x = seq_dict[&#34;data&#34;][:, head:tail, np.newaxis]
-        t = seq_dict[&#34;label&#34;][head:tail]
-        ts = seq_dict[&#34;unixtime&#34;][head:tail]
+        new_ss = ss.get_segment(win, self.window)
+        tensors = new_ss.get_tensors(self.tensor_set_config)
+        return tensors
 
-        if pad_tail &gt; 0:
-            x = np.pad(x, [(0, 0), (0, pad_tail), (0, 0)],
-                       mode=&#34;constant&#34;, constant_values=0)
-            t = np.pad(t, [(0, pad_tail)], mode=&#34;constant&#34;,
-                       constant_values=self.classes.get_ignore_class_index())
-            ts = np.pad(ts, [(0, pad_tail)],
-                        mode=&#34;constant&#34;, constant_values=ts[-1])
-
-        x = torch.from_numpy(x)
-        t = torch.from_numpy(t)
-        ts = torch.from_numpy(ts)
-        return {&#34;x&#34;: x, &#34;t&#34;: t, &#34;ts&#34;: ts}
 
 # -----------------------------------------------------------------------------
+# =====================
+#   With Boundary Info
+# =====================
+class ImuBoundaryDataset(OpenPackImu):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+            &#34;boundary&#34;: {
+                &#34;new_key&#34;: &#34;tb&#34;,
+                &#34;dtype&#34;: torch.float,
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
 
-
-class OpenPackKeypoint(torch.utils.data.Dataset):
-    &#34;&#34;&#34;Dataset Class for Keypoint Data.
-
-    Attributes:
-        data (List[Dict]): shape = (N, 3, FRAMES, VERTEX)
-        index (Tuple[Dict]): sample index. A dict in this tuple as 3 property.
-            ``seq`` = sequence index, ``sqg`` = segment index which is a sequential number
-            within the single sequence. ``pos`` = sample index of the start of this segment.
-        classes (Tuple[ActClass]): list of activity classes.
-        window (int): window size (=the number of frames per sample)
-        device (torch.device): -
-        dtype (Tuple[torch.dtype,torch.dtype]): -
-    &#34;&#34;&#34;
-    data: List[Dict] = None
-    index: Tuple[Dict] = None
-
-    def __init__(
-            self,
-            cfg: DictConfig,
-            user_session: Tuple[Tuple[int, int], ...],
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
-            window: int = 15 * 60,
-            submission: bool = False,
-            debug: bool = False,
-    ) -&gt; None:
-        &#34;&#34;&#34;Initialize OpenPackKyepoint dataset class.
-
-        Args:
-            cfg (DictConfig): instance of ``optk.configs.OpenPackConfig``. path, dataset, and
-                annotation attributes must be initialized.
-            user_session (Tuple[Tuple[int, int], ...]): _description_
-            classes (optk.ActSet, optional): activity set definition.
-                Defaults to OPENPACK_OPERATION_CLASSES.
-            window (int, optional): window size. Defaults to 15*60 [frames].
-            submission (bool, optional): _description_. Defaults to False.
-            debug (bool, optional): enable debug mode. Defaults to False.
+    def preprocessing(self) -&gt; None:
         &#34;&#34;&#34;
-        super().__init__()
-        self.window = window
-        self.classes = classes
-        self.submission = submission
-        self.debug = debug
-
-        self.load_dataset(
-            cfg,
-            user_session,
-            submission=submission)
-
-        self.preprocessing()
-
-    def load_dataset(
-        self,
-        cfg: DictConfig,
-        user_session: Tuple[Tuple[int, int], ...],
-        submission: bool = False,
-    ):
-        data, index = [], []
-        for seq_idx, (user, session) in enumerate(user_session):
-            with open_dict(cfg):
-                cfg.user = {&#34;name&#34;: user}
-                cfg.session = session
-
-            path = Path(
-                cfg.dataset.stream.path.dir,
-                cfg.dataset.stream.path.fname,
-            )
-            ts_sess, x_sess = optk.data.load_keypoints(path)
-            x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
-
-            if submission:
-                # For set dummy data.
-                label = np.zeros((len(ts_sess),), dtype=np.int64)
-            else:
-                path = Path(
-                    cfg.dataset.annotation.path.dir,
-                    cfg.dataset.annotation.path.fname
-                )
-                df_label = optk.data.load_and_resample_operation_labels(
-                    path, ts_sess, classes=self.classes)
-                label = df_label[&#34;act_idx&#34;].values
-
-            data.append({
-                &#34;user&#34;: user,
-                &#34;session&#34;: session,
-                &#34;data&#34;: x_sess,
-                &#34;label&#34;: label,
-                &#34;unixtime&#34;: ts_sess,
-            })
-
-            seq_len = x_sess.shape[1]
-            index += [dict(seq=seq_idx, seg=seg_idx, pos=pos)
-                      for seg_idx, pos in enumerate(range(0, seq_len, self.window))]
-
-        self.data = data
-        self.index = tuple(index)
-
-    def preprocessing(self):
-        &#34;&#34;&#34;This method is called after ``load_dataset()`` method and apply preprocessing to loaded data.
-
-        Todo:
-            - [ ] sklearn.preprocessing.StandardScaler()
-            - [ ] DA (half_body_transform)
-                - https://github.com/open-mmlab/mmskeleton/blob/b4c076baa9e02e69b5876c49fa7c509866d902c7/mmskeleton/datasets/estimation.py#L62
+        * Compute boundary label.
         &#34;&#34;&#34;
-        logger.warning(&#34;No preprocessing is applied.&#34;)
+        super().preprocessing()
 
-    @ property
-    def num_classes(self) -&gt; int:
-        return len(self.classes)
+        # -- Add action boundary labels --
+        for ss in self.data:
+            t_id = ss.labels[&#34;annot&#34;].data[0]
+            unixtime = ss.labels[&#34;annot&#34;].unixtime
+            metadata = {&#34;type&#34;: &#34;boundary&#34;}
 
-    def __str__(self) -&gt; str:
-        s = (
-            &#34;OpenPackKeypoint(&#34;
-            f&#34;index={len(self.index)}, &#34;
-            f&#34;num_sequence={len(self.data)}&#34;
-            &#34;)&#34;
+            t_bd = compute_semantic_hard_boundary(t_id, len(self.classes))
+            ss.labels[&#34;boundary&#34;] = Sequence(unixtime, t_bd, metadata)
+
+
+# =================
+#   With IoT Data
+# =================
+class ImuIoTDataset(OpenPackImu):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+            &#34;iot&#34;: {
+                &#34;new_key&#34;: &#34;x_iot&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                # &#34;squeeze&#34;: True,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
+
+    def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+        data_seq = dict()
+        data_seq[&#34;imu&#34;] = load_imu_wrapper(cfg)
+        base_unixtime_seq = data_seq[&#34;imu&#34;].unixtime
+
+        data_seq[&#34;iot&#34;] = load_iot_data_wrapper(cfg, base_unixtime_seq)
+
+        labels_seq = dict()
+        labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+            cfg, base_unixtime_seq, submission, self.classes
         )
-        return s
 
-    def __len__(self) -&gt; int:
-        return len(self.index)
+        ss = SequenceSet(
+            user=cfg.user.name,
+            session=cfg.session,
+            data=data_seq,
+            labels=labels_seq,
+            primary_seqence=&#34;imu&#34;,
+            # metadata=None,
+        )
+        return ss
 
-    def __iter__(self):
-        return self
 
-    def __getitem__(self, index: int) -&gt; Dict:
-        seq_idx, seg_idx = self.index[index][&#34;seq&#34;], self.index[index][&#34;seg&#34;]
-        seq_dict = self.data[seq_idx]
-        seq_len = seq_dict[&#34;data&#34;].shape[1]
+class ImuBoundaryIoTDataset(ImuIoTDataset):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+            &#34;iot&#34;: {
+                &#34;new_key&#34;: &#34;x_iot&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+            &#34;boundary&#34;: {
+                &#34;new_key&#34;: &#34;tb&#34;,
+                &#34;dtype&#34;: torch.float,
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
 
-        # TODO: Make utilities to extract window from long sequence.
-        head = seg_idx * self.window
-        tail = (seg_idx + 1) * self.window
-        if tail &gt;= seq_len:
-            pad_tail = tail - seq_len
-            tail = seq_len
-        else:
-            pad_tail = 0
-        assert (
-            head &gt;= 0) and (
-            tail &gt; head) and (
-            tail &lt;= seq_len), f&#34;head={head}, tail={tail}&#34;
+    def preprocessing(self) -&gt; None:
+        &#34;&#34;&#34;
+        * Compute boundary label.
+        &#34;&#34;&#34;
+        super().preprocessing()
 
-        x = seq_dict[&#34;data&#34;][:, head:tail]
-        t = seq_dict[&#34;label&#34;][head:tail]
-        ts = seq_dict[&#34;unixtime&#34;][head:tail]
+        # -- Add action boundary labels --
+        for ss in self.data:
+            t_id = ss.labels[&#34;annot&#34;].data[0]
+            unixtime = ss.labels[&#34;annot&#34;].unixtime
+            metadata = {&#34;type&#34;: &#34;boundary&#34;}
 
-        if pad_tail &gt; 0:
-            x = np.pad(x, [(0, 0), (0, pad_tail), (0, 0)],
-                       mode=&#34;constant&#34;, constant_values=0)
-            t = np.pad(t, [(0, pad_tail)], mode=&#34;constant&#34;,
-                       constant_values=self.classes.get_ignore_class_index())
-            ts = np.pad(ts, [(0, pad_tail)],
-                        mode=&#34;constant&#34;, constant_values=ts[-1])
+            t_bd = compute_semantic_hard_boundary(t_id, len(self.classes))
+            ss.labels[&#34;boundary&#34;] = Sequence(unixtime, t_bd, metadata)
 
-        x = torch.from_numpy(x)
-        t = torch.from_numpy(t)
-        ts = torch.from_numpy(ts)
-        return {&#34;x&#34;: x, &#34;t&#34;: t, &#34;ts&#34;: ts}</code></pre>
+
+# =============
+#   Keypoints
+# =============
+class Kinect2dKptDataset(OpenPackImu):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;kinect2dKpt&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
+
+    def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+        data_seq = dict()
+        data_seq[&#34;kinect2dKpt&#34;] = load_kinect_2d_kpt_wrapper(cfg)
+        base_unixtime_seq = data_seq[&#34;kinect2dKpt&#34;].unixtime
+
+        labels_seq = dict()
+        labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+            cfg, base_unixtime_seq, submission, self.classes
+        )
+
+        ss = SequenceSet(
+            user=cfg.user.name,
+            session=cfg.session,
+            data=data_seq,
+            labels=labels_seq,
+            primary_seqence=&#34;kinect2dKpt&#34;,
+        )
+        return ss
+
+    def preprocessing(self) -&gt; None:
+        &#34;&#34;&#34;Standardize X-/Y-axis.&#34;&#34;&#34;
+        mean_x = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.mean.x
+        mean_y = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.mean.y
+        std_x = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.std.x
+        std_y = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.std.y
+
+        for ss in self.data:
+            x = ss.data.get(&#34;kinect2dKpt&#34;).data
+            x[0] = (x[0] - mean_x) / std_x
+            x[1] = (x[1] - mean_y) / std_y
+            ss.data.get(&#34;kinect2dKpt&#34;).data = x</code></pre>
 </details>
 </section>
 <section>
@@ -398,13 +518,735 @@ class OpenPackKeypoint(torch.utils.data.Dataset):
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="openpack_torch.data.datasets.random_window_shift"><code class="name flex">
+<span>def <span class="ident">random_window_shift</span></span>(<span>win: openpack_torch.data._baseclass.Window, win_size: int, seq_len: int) ‑> openpack_torch.data._baseclass.Window</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Change cropping position up to 50%.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>seq_len</code></strong> :&ensp;<code>int</code></dt>
+<dd>length of whole sequence.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def random_window_shift(win: Window, win_size: int, seq_len: int) -&gt; Window:
+    &#34;&#34;&#34;Change cropping position up to 50%.
+
+    Args:
+        seq_len (int): length of whole sequence.
+    &#34;&#34;&#34;
+    start = win.start
+    stop = start + win_size
+    if stop &gt;= seq_len:
+        stop = seq_len
+
+    shift = int(np.random.uniform(-1, 1, size=(1,)) * ((stop - start) / 2))
+    new_start, new_stop = start + shift, stop + shift
+
+    if new_start &lt; 0:
+        new_start = 0
+    if new_stop &gt;= seq_len:
+        new_stop = seq_len
+
+    if new_start &gt; new_stop:
+        raise ValueError(
+            f&#34;start={start}, stop={stop} &#34;
+            f&#34;-&gt; new_start={new_start}, new_stop={new_stop} (shift={shift})&#34;
+        )
+
+    new_win = Window(win.sequence_idx, win.segment_idx, new_start, new_stop)
+    return new_win</code></pre>
+</details>
+</dd>
+</dl>
 </section>
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
+<dt id="openpack_torch.data.datasets.ImuBoundaryDataset"><code class="flex name class">
+<span>class <span class="ident">ImuBoundaryDataset</span></span>
+<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig, user_session_list: Tuple[Tuple[int, int], ...] = None, classes: openpack_toolkit.activity.ActSet = None, window: int = 1800, random_crop=False, submission: bool = False, debug: bool = False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Dataset class for IMU data.</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>data</code></strong> :&ensp;<code>List[Dict]</code></dt>
+<dd>each sequence is stored in dict. The dict has 5 keys (i.e.,
+user, session, data, label(=class index), unixtime). data is a np.ndarray with
+shape = <code>(N, channel(=acc_x, acc_y, ...), window, 1)</code>.</dd>
+<dt><strong><code>index</code></strong> :&ensp;<code>Tuple[Dict]</code></dt>
+<dd>sample index. A dict in this tuple as 3 property.
+<code>seq</code> = sequence index, <code>sqg</code> = segment index which is a sequential number
+within the single sequence. <code>pos</code> = sample index of the start of this segment.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code></dt>
+<dd>list of activity classes.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code></dt>
+<dd>sliding window size.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code></dt>
+<dd>If True, enable debug mode. Default to False.</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Set True when you make submission file. Annotation data will not be
+loaded and dummy data will be generated. Default to False.</dd>
+</dl>
+<h2 id="todo">Todo</h2>
+<ul>
+<li>Make a minimum copy of cfg (DictConfig) before using in <code>load_dataset()</code>.</li>
+<li>Add method for parameter validation (i.e., assert).</li>
+</ul>
+<p>Initialize OpenPackImu dataset class.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>cfg</code></strong> :&ensp;<code>DictConfig</code></dt>
+<dd>instance of <code>optk.configs.OpenPackConfig</code>. path, dataset, and
+annotation attributes must be initialized.</dd>
+<dt><strong><code>user_session</code></strong> :&ensp;<code>Tuple[Tuple[int, int], &hellip;]</code></dt>
+<dd>the list of pairs of user ID and session ID
+to be included.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code>, optional</dt>
+<dd>activity set definition.
+Defaults to OPENPACK_OPERATION_CLASSES.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>window size [steps]. Defaults to 30*60 [s].</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>Set True when you want to load test data for submission.
+If True, the annotation data will no be replaced by dummy data. Defaults to False.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>enable debug mode. Defaults to False.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class ImuBoundaryDataset(OpenPackImu):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+            &#34;boundary&#34;: {
+                &#34;new_key&#34;: &#34;tb&#34;,
+                &#34;dtype&#34;: torch.float,
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
+
+    def preprocessing(self) -&gt; None:
+        &#34;&#34;&#34;
+        * Compute boundary label.
+        &#34;&#34;&#34;
+        super().preprocessing()
+
+        # -- Add action boundary labels --
+        for ss in self.data:
+            t_id = ss.labels[&#34;annot&#34;].data[0]
+            unixtime = ss.labels[&#34;annot&#34;].unixtime
+            metadata = {&#34;type&#34;: &#34;boundary&#34;}
+
+            t_bd = compute_semantic_hard_boundary(t_id, len(self.classes))
+            ss.labels[&#34;boundary&#34;] = Sequence(unixtime, t_bd, metadata)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></li>
+<li>torch.utils.data.dataset.Dataset</li>
+<li>typing.Generic</li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.ImuBoundaryDataset.tensor_set_config"><code class="name">var <span class="ident">tensor_set_config</span> : Dict</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.ImuBoundaryDataset.preprocessing"><code class="name flex">
+<span>def <span class="ident">preprocessing</span></span>(<span>self) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><ul>
+<li>Compute boundary label.</li>
+</ul></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def preprocessing(self) -&gt; None:
+    &#34;&#34;&#34;
+    * Compute boundary label.
+    &#34;&#34;&#34;
+    super().preprocessing()
+
+    # -- Add action boundary labels --
+    for ss in self.data:
+        t_id = ss.labels[&#34;annot&#34;].data[0]
+        unixtime = ss.labels[&#34;annot&#34;].unixtime
+        metadata = {&#34;type&#34;: &#34;boundary&#34;}
+
+        t_bd = compute_semantic_hard_boundary(t_id, len(self.classes))
+        ss.labels[&#34;boundary&#34;] = Sequence(unixtime, t_bd, metadata)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></b></code>:
+<ul class="hlist">
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.load_dataset" href="#openpack_torch.data.datasets.OpenPackImu.load_dataset">load_dataset</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.num_classes" href="#openpack_torch.data.datasets.OpenPackImu.num_classes">num_classes</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="openpack_torch.data.datasets.ImuBoundaryIoTDataset"><code class="flex name class">
+<span>class <span class="ident">ImuBoundaryIoTDataset</span></span>
+<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig, user_session_list: Tuple[Tuple[int, int], ...] = None, classes: openpack_toolkit.activity.ActSet = None, window: int = 1800, random_crop=False, submission: bool = False, debug: bool = False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Dataset class for IMU data.</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>data</code></strong> :&ensp;<code>List[Dict]</code></dt>
+<dd>each sequence is stored in dict. The dict has 5 keys (i.e.,
+user, session, data, label(=class index), unixtime). data is a np.ndarray with
+shape = <code>(N, channel(=acc_x, acc_y, ...), window, 1)</code>.</dd>
+<dt><strong><code>index</code></strong> :&ensp;<code>Tuple[Dict]</code></dt>
+<dd>sample index. A dict in this tuple as 3 property.
+<code>seq</code> = sequence index, <code>sqg</code> = segment index which is a sequential number
+within the single sequence. <code>pos</code> = sample index of the start of this segment.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code></dt>
+<dd>list of activity classes.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code></dt>
+<dd>sliding window size.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code></dt>
+<dd>If True, enable debug mode. Default to False.</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Set True when you make submission file. Annotation data will not be
+loaded and dummy data will be generated. Default to False.</dd>
+</dl>
+<h2 id="todo">Todo</h2>
+<ul>
+<li>Make a minimum copy of cfg (DictConfig) before using in <code>load_dataset()</code>.</li>
+<li>Add method for parameter validation (i.e., assert).</li>
+</ul>
+<p>Initialize OpenPackImu dataset class.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>cfg</code></strong> :&ensp;<code>DictConfig</code></dt>
+<dd>instance of <code>optk.configs.OpenPackConfig</code>. path, dataset, and
+annotation attributes must be initialized.</dd>
+<dt><strong><code>user_session</code></strong> :&ensp;<code>Tuple[Tuple[int, int], &hellip;]</code></dt>
+<dd>the list of pairs of user ID and session ID
+to be included.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code>, optional</dt>
+<dd>activity set definition.
+Defaults to OPENPACK_OPERATION_CLASSES.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>window size [steps]. Defaults to 30*60 [s].</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>Set True when you want to load test data for submission.
+If True, the annotation data will no be replaced by dummy data. Defaults to False.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>enable debug mode. Defaults to False.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class ImuBoundaryIoTDataset(ImuIoTDataset):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+            &#34;iot&#34;: {
+                &#34;new_key&#34;: &#34;x_iot&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+            &#34;boundary&#34;: {
+                &#34;new_key&#34;: &#34;tb&#34;,
+                &#34;dtype&#34;: torch.float,
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
+
+    def preprocessing(self) -&gt; None:
+        &#34;&#34;&#34;
+        * Compute boundary label.
+        &#34;&#34;&#34;
+        super().preprocessing()
+
+        # -- Add action boundary labels --
+        for ss in self.data:
+            t_id = ss.labels[&#34;annot&#34;].data[0]
+            unixtime = ss.labels[&#34;annot&#34;].unixtime
+            metadata = {&#34;type&#34;: &#34;boundary&#34;}
+
+            t_bd = compute_semantic_hard_boundary(t_id, len(self.classes))
+            ss.labels[&#34;boundary&#34;] = Sequence(unixtime, t_bd, metadata)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="openpack_torch.data.datasets.ImuIoTDataset" href="#openpack_torch.data.datasets.ImuIoTDataset">ImuIoTDataset</a></li>
+<li><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></li>
+<li>torch.utils.data.dataset.Dataset</li>
+<li>typing.Generic</li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.ImuBoundaryIoTDataset.tensor_set_config"><code class="name">var <span class="ident">tensor_set_config</span> : Dict</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.ImuBoundaryIoTDataset.preprocessing"><code class="name flex">
+<span>def <span class="ident">preprocessing</span></span>(<span>self) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><ul>
+<li>Compute boundary label.</li>
+</ul></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def preprocessing(self) -&gt; None:
+    &#34;&#34;&#34;
+    * Compute boundary label.
+    &#34;&#34;&#34;
+    super().preprocessing()
+
+    # -- Add action boundary labels --
+    for ss in self.data:
+        t_id = ss.labels[&#34;annot&#34;].data[0]
+        unixtime = ss.labels[&#34;annot&#34;].unixtime
+        metadata = {&#34;type&#34;: &#34;boundary&#34;}
+
+        t_bd = compute_semantic_hard_boundary(t_id, len(self.classes))
+        ss.labels[&#34;boundary&#34;] = Sequence(unixtime, t_bd, metadata)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="openpack_torch.data.datasets.ImuIoTDataset" href="#openpack_torch.data.datasets.ImuIoTDataset">ImuIoTDataset</a></b></code>:
+<ul class="hlist">
+<li><code><a title="openpack_torch.data.datasets.ImuIoTDataset.load_dataset" href="#openpack_torch.data.datasets.OpenPackImu.load_dataset">load_dataset</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.ImuIoTDataset.num_classes" href="#openpack_torch.data.datasets.OpenPackImu.num_classes">num_classes</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="openpack_torch.data.datasets.ImuIoTDataset"><code class="flex name class">
+<span>class <span class="ident">ImuIoTDataset</span></span>
+<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig, user_session_list: Tuple[Tuple[int, int], ...] = None, classes: openpack_toolkit.activity.ActSet = None, window: int = 1800, random_crop=False, submission: bool = False, debug: bool = False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Dataset class for IMU data.</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>data</code></strong> :&ensp;<code>List[Dict]</code></dt>
+<dd>each sequence is stored in dict. The dict has 5 keys (i.e.,
+user, session, data, label(=class index), unixtime). data is a np.ndarray with
+shape = <code>(N, channel(=acc_x, acc_y, ...), window, 1)</code>.</dd>
+<dt><strong><code>index</code></strong> :&ensp;<code>Tuple[Dict]</code></dt>
+<dd>sample index. A dict in this tuple as 3 property.
+<code>seq</code> = sequence index, <code>sqg</code> = segment index which is a sequential number
+within the single sequence. <code>pos</code> = sample index of the start of this segment.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code></dt>
+<dd>list of activity classes.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code></dt>
+<dd>sliding window size.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code></dt>
+<dd>If True, enable debug mode. Default to False.</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Set True when you make submission file. Annotation data will not be
+loaded and dummy data will be generated. Default to False.</dd>
+</dl>
+<h2 id="todo">Todo</h2>
+<ul>
+<li>Make a minimum copy of cfg (DictConfig) before using in <code>load_dataset()</code>.</li>
+<li>Add method for parameter validation (i.e., assert).</li>
+</ul>
+<p>Initialize OpenPackImu dataset class.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>cfg</code></strong> :&ensp;<code>DictConfig</code></dt>
+<dd>instance of <code>optk.configs.OpenPackConfig</code>. path, dataset, and
+annotation attributes must be initialized.</dd>
+<dt><strong><code>user_session</code></strong> :&ensp;<code>Tuple[Tuple[int, int], &hellip;]</code></dt>
+<dd>the list of pairs of user ID and session ID
+to be included.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code>, optional</dt>
+<dd>activity set definition.
+Defaults to OPENPACK_OPERATION_CLASSES.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>window size [steps]. Defaults to 30*60 [s].</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>Set True when you want to load test data for submission.
+If True, the annotation data will no be replaced by dummy data. Defaults to False.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>enable debug mode. Defaults to False.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class ImuIoTDataset(OpenPackImu):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+            &#34;iot&#34;: {
+                &#34;new_key&#34;: &#34;x_iot&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                # &#34;squeeze&#34;: True,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
+
+    def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+        data_seq = dict()
+        data_seq[&#34;imu&#34;] = load_imu_wrapper(cfg)
+        base_unixtime_seq = data_seq[&#34;imu&#34;].unixtime
+
+        data_seq[&#34;iot&#34;] = load_iot_data_wrapper(cfg, base_unixtime_seq)
+
+        labels_seq = dict()
+        labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+            cfg, base_unixtime_seq, submission, self.classes
+        )
+
+        ss = SequenceSet(
+            user=cfg.user.name,
+            session=cfg.session,
+            data=data_seq,
+            labels=labels_seq,
+            primary_seqence=&#34;imu&#34;,
+            # metadata=None,
+        )
+        return ss</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></li>
+<li>torch.utils.data.dataset.Dataset</li>
+<li>typing.Generic</li>
+</ul>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="openpack_torch.data.datasets.ImuBoundaryIoTDataset" href="#openpack_torch.data.datasets.ImuBoundaryIoTDataset">ImuBoundaryIoTDataset</a></li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.ImuIoTDataset.tensor_set_config"><code class="name">var <span class="ident">tensor_set_config</span> : Dict</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.ImuIoTDataset.load_single_session"><code class="name flex">
+<span>def <span class="ident">load_single_session</span></span>(<span>self, cfg, submission) ‑> openpack_torch.data._baseclass.SequenceSet</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+    data_seq = dict()
+    data_seq[&#34;imu&#34;] = load_imu_wrapper(cfg)
+    base_unixtime_seq = data_seq[&#34;imu&#34;].unixtime
+
+    data_seq[&#34;iot&#34;] = load_iot_data_wrapper(cfg, base_unixtime_seq)
+
+    labels_seq = dict()
+    labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+        cfg, base_unixtime_seq, submission, self.classes
+    )
+
+    ss = SequenceSet(
+        user=cfg.user.name,
+        session=cfg.session,
+        data=data_seq,
+        labels=labels_seq,
+        primary_seqence=&#34;imu&#34;,
+        # metadata=None,
+    )
+    return ss</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></b></code>:
+<ul class="hlist">
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.load_dataset" href="#openpack_torch.data.datasets.OpenPackImu.load_dataset">load_dataset</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.num_classes" href="#openpack_torch.data.datasets.OpenPackImu.num_classes">num_classes</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.preprocessing" href="#openpack_torch.data.datasets.OpenPackImu.preprocessing">preprocessing</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="openpack_torch.data.datasets.Kinect2dKptDataset"><code class="flex name class">
+<span>class <span class="ident">Kinect2dKptDataset</span></span>
+<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig, user_session_list: Tuple[Tuple[int, int], ...] = None, classes: openpack_toolkit.activity.ActSet = None, window: int = 1800, random_crop=False, submission: bool = False, debug: bool = False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Dataset class for IMU data.</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>data</code></strong> :&ensp;<code>List[Dict]</code></dt>
+<dd>each sequence is stored in dict. The dict has 5 keys (i.e.,
+user, session, data, label(=class index), unixtime). data is a np.ndarray with
+shape = <code>(N, channel(=acc_x, acc_y, ...), window, 1)</code>.</dd>
+<dt><strong><code>index</code></strong> :&ensp;<code>Tuple[Dict]</code></dt>
+<dd>sample index. A dict in this tuple as 3 property.
+<code>seq</code> = sequence index, <code>sqg</code> = segment index which is a sequential number
+within the single sequence. <code>pos</code> = sample index of the start of this segment.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code></dt>
+<dd>list of activity classes.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code></dt>
+<dd>sliding window size.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code></dt>
+<dd>If True, enable debug mode. Default to False.</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Set True when you make submission file. Annotation data will not be
+loaded and dummy data will be generated. Default to False.</dd>
+</dl>
+<h2 id="todo">Todo</h2>
+<ul>
+<li>Make a minimum copy of cfg (DictConfig) before using in <code>load_dataset()</code>.</li>
+<li>Add method for parameter validation (i.e., assert).</li>
+</ul>
+<p>Initialize OpenPackImu dataset class.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>cfg</code></strong> :&ensp;<code>DictConfig</code></dt>
+<dd>instance of <code>optk.configs.OpenPackConfig</code>. path, dataset, and
+annotation attributes must be initialized.</dd>
+<dt><strong><code>user_session</code></strong> :&ensp;<code>Tuple[Tuple[int, int], &hellip;]</code></dt>
+<dd>the list of pairs of user ID and session ID
+to be included.</dd>
+<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code>, optional</dt>
+<dd>activity set definition.
+Defaults to OPENPACK_OPERATION_CLASSES.</dd>
+<dt><strong><code>window</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>window size [steps]. Defaults to 30*60 [s].</dd>
+<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>Set True when you want to load test data for submission.
+If True, the annotation data will no be replaced by dummy data. Defaults to False.</dd>
+<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>enable debug mode. Defaults to False.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class Kinect2dKptDataset(OpenPackImu):
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;kinect2dKpt&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
+
+    def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+        data_seq = dict()
+        data_seq[&#34;kinect2dKpt&#34;] = load_kinect_2d_kpt_wrapper(cfg)
+        base_unixtime_seq = data_seq[&#34;kinect2dKpt&#34;].unixtime
+
+        labels_seq = dict()
+        labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+            cfg, base_unixtime_seq, submission, self.classes
+        )
+
+        ss = SequenceSet(
+            user=cfg.user.name,
+            session=cfg.session,
+            data=data_seq,
+            labels=labels_seq,
+            primary_seqence=&#34;kinect2dKpt&#34;,
+        )
+        return ss
+
+    def preprocessing(self) -&gt; None:
+        &#34;&#34;&#34;Standardize X-/Y-axis.&#34;&#34;&#34;
+        mean_x = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.mean.x
+        mean_y = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.mean.y
+        std_x = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.std.x
+        std_y = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.std.y
+
+        for ss in self.data:
+            x = ss.data.get(&#34;kinect2dKpt&#34;).data
+            x[0] = (x[0] - mean_x) / std_x
+            x[1] = (x[1] - mean_y) / std_y
+            ss.data.get(&#34;kinect2dKpt&#34;).data = x</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></li>
+<li>torch.utils.data.dataset.Dataset</li>
+<li>typing.Generic</li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.Kinect2dKptDataset.tensor_set_config"><code class="name">var <span class="ident">tensor_set_config</span> : Dict</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="openpack_torch.data.datasets.Kinect2dKptDataset.load_single_session"><code class="name flex">
+<span>def <span class="ident">load_single_session</span></span>(<span>self, cfg, submission) ‑> openpack_torch.data._baseclass.SequenceSet</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+    data_seq = dict()
+    data_seq[&#34;kinect2dKpt&#34;] = load_kinect_2d_kpt_wrapper(cfg)
+    base_unixtime_seq = data_seq[&#34;kinect2dKpt&#34;].unixtime
+
+    labels_seq = dict()
+    labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+        cfg, base_unixtime_seq, submission, self.classes
+    )
+
+    ss = SequenceSet(
+        user=cfg.user.name,
+        session=cfg.session,
+        data=data_seq,
+        labels=labels_seq,
+        primary_seqence=&#34;kinect2dKpt&#34;,
+    )
+    return ss</code></pre>
+</details>
+</dd>
+<dt id="openpack_torch.data.datasets.Kinect2dKptDataset.preprocessing"><code class="name flex">
+<span>def <span class="ident">preprocessing</span></span>(<span>self) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Standardize X-/Y-axis.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def preprocessing(self) -&gt; None:
+    &#34;&#34;&#34;Standardize X-/Y-axis.&#34;&#34;&#34;
+    mean_x = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.mean.x
+    mean_y = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.mean.y
+    std_x = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.std.x
+    std_y = self.cfg.dataset.stream.spec.kinect2dKpt.spec.stats.std.y
+
+    for ss in self.data:
+        x = ss.data.get(&#34;kinect2dKpt&#34;).data
+        x[0] = (x[0] - mean_x) / std_x
+        x[1] = (x[1] - mean_y) / std_y
+        ss.data.get(&#34;kinect2dKpt&#34;).data = x</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></b></code>:
+<ul class="hlist">
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.load_dataset" href="#openpack_torch.data.datasets.OpenPackImu.load_dataset">load_dataset</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.num_classes" href="#openpack_torch.data.datasets.OpenPackImu.num_classes">num_classes</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
 <dt id="openpack_torch.data.datasets.OpenPackImu"><code class="flex name class">
 <span>class <span class="ident">OpenPackImu</span></span>
-<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig, user_session_list: Tuple[Tuple[int, int], ...], classes: openpack_toolkit.activity.ActSet = ActSet(classes=(ActClass(id=100, name='Picking', is_ignore=False), ActClass(id=200, name='Relocate Item Label', is_ignore=False), ActClass(id=300, name='Assemble Box', is_ignore=False), ActClass(id=400, name='Insert Items', is_ignore=False), ActClass(id=500, name='Close Box', is_ignore=False), ActClass(id=600, name='Attach Box Label', is_ignore=False), ActClass(id=700, name='Scan Label', is_ignore=False), ActClass(id=800, name='Attach Shipping Label', is_ignore=False), ActClass(id=900, name='Put on Back Table', is_ignore=False), ActClass(id=1000, name='Fill out Order', is_ignore=False), ActClass(id=8100, name='Null', is_ignore=True))), window: int = 1800, submission: bool = False, debug: bool = False)</span>
+<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig, user_session_list: Tuple[Tuple[int, int], ...] = None, classes: openpack_toolkit.activity.ActSet = None, window: int = 1800, random_crop=False, submission: bool = False, debug: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Dataset class for IMU data.</p>
@@ -459,7 +1301,6 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
 </summary>
 <pre><code class="python">class OpenPackImu(torch.utils.data.Dataset):
     &#34;&#34;&#34;Dataset class for IMU data.
-
     Attributes:
         data (List[Dict]): each sequence is stored in dict. The dict has 5 keys (i.e.,
             user, session, data, label(=class index), unixtime). data is a np.ndarray with
@@ -472,25 +1313,50 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
         debug (bool): If True, enable debug mode. Default to False.
         submission (bool): Set True when you make submission file. Annotation data will not be
             loaded and dummy data will be generated. Default to False.
-
     Todo:
         * Make a minimum copy of cfg (DictConfig) before using in ``load_dataset()``.
         * Add method for parameter validation (i.e., assert).
     &#34;&#34;&#34;
+
     data: List[Dict] = None
     index: Tuple[Dict] = None
+    tensor_set_config: Dict = {
+        &#34;data&#34;: {
+            &#34;imu&#34;: {
+                &#34;new_key&#34;: &#34;x&#34;,
+                &#34;dtype&#34;: torch.float,
+                &#34;callbacks&#34;: [
+                    lambda x: x.unsqueeze(2),
+                ],
+            },
+        },
+        &#34;labels&#34;: {
+            &#34;annot&#34;: {
+                &#34;new_key&#34;: &#34;t&#34;,
+                &#34;dtype&#34;: torch.long,
+                &#34;squeeze&#34;: True,
+                &#34;callbacks&#34;: [
+                    lambda x: x.squeeze(0),
+                ],
+            },
+        },
+        &#34;unixtime&#34;: {
+            &#34;new_key&#34;: &#34;ts&#34;,
+            &#34;dtype&#34;: torch.long,
+        },
+    }
 
     def __init__(
-            self,
-            cfg: DictConfig,
-            user_session_list: Tuple[Tuple[int, int], ...],
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
-            window: int = 30 * 60,
-            submission: bool = False,
-            debug: bool = False,
+        self,
+        cfg: DictConfig,
+        user_session_list: Tuple[Tuple[int, int], ...] = None,
+        classes: optk.ActSet = None,
+        window: int = 30 * 60,
+        random_crop=False,
+        submission: bool = False,
+        debug: bool = False,
     ) -&gt; None:
         &#34;&#34;&#34;Initialize OpenPackImu dataset class.
-
         Args:
             cfg (DictConfig): instance of ``optk.configs.OpenPackConfig``. path, dataset, and
                 annotation attributes must be initialized.
@@ -504,18 +1370,42 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
             debug (bool, optional): enable debug mode. Defaults to False.
         &#34;&#34;&#34;
         super().__init__()
+        self.cfg = cfg
         self.classes = classes
         self.window = window
         self.submission = submission
         self.debug = debug
+        self.random_crop = random_crop
 
-        self.load_dataset(
-            cfg,
-            user_session_list,
-            window,
-            submission=submission)
+        if self.classes is None:
+            class_set_key = cfg.dataset.annotation.name.replace(&#34;-&#34;, &#34;_&#34;).upper()
+            classes_tuple = eval(
+                f&#34;optk.configs.datasets.annotations.{class_set_key}&#34;
+            ).classes
+            self.classes = optk.ActSet(classes_tuple)
 
-        self.preprocessing()
+        if user_session_list is not None:
+            self.load_dataset(cfg, user_session_list, window, submission=submission)
+            self.preprocessing()
+
+    def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+        data_seq = dict()
+        data_seq[&#34;imu&#34;] = load_imu_wrapper(cfg)
+        base_unixtime_seq = data_seq[&#34;imu&#34;].unixtime
+
+        labels_seq = dict()
+        labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+            cfg, base_unixtime_seq, submission, self.classes
+        )
+
+        ss = SequenceSet(
+            user=cfg.user.name,
+            session=cfg.session,
+            data=data_seq,
+            labels=labels_seq,
+            primary_seqence=&#34;imu&#34;,
+        )
+        return ss
 
     def load_dataset(
         self,
@@ -525,7 +1415,6 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
         submission: bool = False,
     ) -&gt; None:
         &#34;&#34;&#34;Called in ``__init__()`` and load required data.
-
         Args:
             user_session (Tuple[Tuple[str, str], ...]): _description_
             window (int, optional): _description_. Defaults to None.
@@ -536,59 +1425,55 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
             with open_dict(cfg):
                 cfg.user = {&#34;name&#34;: user}
                 cfg.session = session
+            ss = self.load_single_session(cfg, submission)
 
-            paths_imu = []
-            for device in cfg.dataset.stream.devices:
-                with open_dict(cfg):
-                    cfg.device = device
+            data.append(ss)
+            index += [
+                Window(seq_idx, seg_idx, start, start + window)
+                for seg_idx, start in enumerate(range(0, ss.seq_len(), window))
+            ]
 
-                path = Path(
-                    cfg.dataset.stream.path.dir,
-                    cfg.dataset.stream.path.fname
-                )
-                paths_imu.append(path)
-
-            ts_sess, x_sess = optk.data.load_imu(
-                paths_imu,
-                use_acc=cfg.dataset.stream.acc,
-                use_gyro=cfg.dataset.stream.gyro,
-                use_quat=cfg.dataset.stream.quat)
-
-            if submission:
-                # For set dummy data.
-                label = np.zeros((len(ts_sess),), dtype=np.int64)
-            else:
-                path = Path(
-                    cfg.dataset.annotation.path.dir,
-                    cfg.dataset.annotation.path.fname
-                )
-                df_label = optk.data.load_and_resample_operation_labels(
-                    path, ts_sess, classes=self.classes)
-                label = df_label[&#34;act_idx&#34;].values
-
-            data.append({
-                &#34;user&#34;: user,
-                &#34;session&#34;: session,
-                &#34;data&#34;: x_sess,
-                &#34;label&#34;: label,
-                &#34;unixtime&#34;: ts_sess,
-            })
-
-            seq_len = ts_sess.shape[0]
-            index += [dict(seq=seq_idx, seg=seg_idx, pos=pos)
-                      for seg_idx, pos in enumerate(range(0, seq_len, window))]
         self.data = data
         self.index = tuple(index)
 
     def preprocessing(self) -&gt; None:
-        &#34;&#34;&#34;This method is called after ``load_dataset()`` and apply preprocessing to loaded data.
         &#34;&#34;&#34;
-        logger.warning(&#34;No preprocessing is applied.&#34;)
+        * Normalize [-3G, +3G] into [0, 1].
+        &#34;&#34;&#34;
+        # NOTE: Normalize ACC data. ([-3G, +3G] -&gt; [0, 1])
+        # NOTE: Described in Appendix Sec.3.2.
+        is_agq = (
+            self.cfg.dataset.stream.spec.imu.gyro
+            and self.cfg.dataset.stream.spec.imu.quat
+        )
+        devices = self.cfg.dataset.stream.spec.imu.devices
+
+        for ss in self.data:
+            x = ss.data.get(&#34;imu&#34;).data
+            if is_agq:
+                for i, device in enumerate(devices):
+                    # ACC
+                    dims = [10 * i + 0, 10 * i + 1, 10 * i + 2]
+                    x[dims] = np.clip(x[dims], -3, +3)
+                    x[dims] = (x[dims] + 3.0) / 6.0
+                    # Gyro
+                    for j, ch in enumerate([&#34;x&#34;, &#34;y&#34;, &#34;z&#34;]):
+                        dim = 10 * i + (3 + j)
+                        mean = (
+                            self.cfg.dataset.stream.spec.imu.stats[device].gyro[ch].mean
+                        )
+                        std = (
+                            self.cfg.dataset.stream.spec.imu.stats[device].gyro[ch].std
+                        )
+                        x[dim] = (x[dim] - mean) / std
+            else:
+                x = np.clip(x, -3, +3)
+                x = (x + 3.0) / 6.0
+            ss.data.get(&#34;imu&#34;).data = x
 
     @property
     def num_classes(self) -&gt; int:
         &#34;&#34;&#34;Returns the number of classes
-
         Returns:
             int
         &#34;&#34;&#34;
@@ -599,7 +1484,8 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
             &#34;OpenPackImu(&#34;
             f&#34;index={len(self.index)}, &#34;
             f&#34;num_sequence={len(self.data)}, &#34;
-            f&#34;submission={self.submission}&#34;
+            f&#34;submission={self.submission}, &#34;
+            f&#34;random_crop={self.random_crop}&#34;
             &#34;)&#34;
         )
         return s
@@ -611,43 +1497,27 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
         return self
 
     def __getitem__(self, index: int) -&gt; Dict:
-        seq_idx, seg_idx = self.index[index][&#34;seq&#34;], self.index[index][&#34;seg&#34;]
-        seq_dict = self.data[seq_idx]
-        seq_len = seq_dict[&#34;data&#34;].shape[1]
+        win = self.index[index]
+        ss = self.data[win.sequence_idx]
 
-        head = seg_idx * self.window
-        tail = (seg_idx + 1) * self.window
-        if tail &gt;= seq_len:
-            pad_tail = tail - seq_len
-            tail = seq_len
-        else:
-            pad_tail = 0
-        assert (
-            head &gt;= 0) and (
-            tail &gt; head) and (
-            tail &lt;= seq_len), f&#34;head={head}, tail={tail}&#34;
+        # TODO: Implement  Random crop
+        if self.random_crop:
+            win = random_window_shift(win, self.window, len(ss))
 
-        x = seq_dict[&#34;data&#34;][:, head:tail, np.newaxis]
-        t = seq_dict[&#34;label&#34;][head:tail]
-        ts = seq_dict[&#34;unixtime&#34;][head:tail]
-
-        if pad_tail &gt; 0:
-            x = np.pad(x, [(0, 0), (0, pad_tail), (0, 0)],
-                       mode=&#34;constant&#34;, constant_values=0)
-            t = np.pad(t, [(0, pad_tail)], mode=&#34;constant&#34;,
-                       constant_values=self.classes.get_ignore_class_index())
-            ts = np.pad(ts, [(0, pad_tail)],
-                        mode=&#34;constant&#34;, constant_values=ts[-1])
-
-        x = torch.from_numpy(x)
-        t = torch.from_numpy(t)
-        ts = torch.from_numpy(ts)
-        return {&#34;x&#34;: x, &#34;t&#34;: t, &#34;ts&#34;: ts}</code></pre>
+        new_ss = ss.get_segment(win, self.window)
+        tensors = new_ss.get_tensors(self.tensor_set_config)
+        return tensors</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li>torch.utils.data.dataset.Dataset</li>
 <li>typing.Generic</li>
+</ul>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="openpack_torch.data.datasets.ImuBoundaryDataset" href="#openpack_torch.data.datasets.ImuBoundaryDataset">ImuBoundaryDataset</a></li>
+<li><a title="openpack_torch.data.datasets.ImuIoTDataset" href="#openpack_torch.data.datasets.ImuIoTDataset">ImuIoTDataset</a></li>
+<li><a title="openpack_torch.data.datasets.Kinect2dKptDataset" href="#openpack_torch.data.datasets.Kinect2dKptDataset">Kinect2dKptDataset</a></li>
 </ul>
 <h3>Class variables</h3>
 <dl>
@@ -656,6 +1526,10 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
 <div class="desc"></div>
 </dd>
 <dt id="openpack_torch.data.datasets.OpenPackImu.index"><code class="name">var <span class="ident">index</span> : Tuple[Dict]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="openpack_torch.data.datasets.OpenPackImu.tensor_set_config"><code class="name">var <span class="ident">tensor_set_config</span> : Dict</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -674,7 +1548,6 @@ If True, the annotation data will no be replaced by dummy data. Defaults to Fals
 <pre><code class="python">@property
 def num_classes(self) -&gt; int:
     &#34;&#34;&#34;Returns the number of classes
-
     Returns:
         int
     &#34;&#34;&#34;
@@ -710,7 +1583,6 @@ def num_classes(self) -&gt; int:
     submission: bool = False,
 ) -&gt; None:
     &#34;&#34;&#34;Called in ``__init__()`` and load required data.
-
     Args:
         user_session (Tuple[Tuple[str, str], ...]): _description_
         window (int, optional): _description_. Defaults to None.
@@ -721,388 +1593,92 @@ def num_classes(self) -&gt; int:
         with open_dict(cfg):
             cfg.user = {&#34;name&#34;: user}
             cfg.session = session
+        ss = self.load_single_session(cfg, submission)
 
-        paths_imu = []
-        for device in cfg.dataset.stream.devices:
-            with open_dict(cfg):
-                cfg.device = device
+        data.append(ss)
+        index += [
+            Window(seq_idx, seg_idx, start, start + window)
+            for seg_idx, start in enumerate(range(0, ss.seq_len(), window))
+        ]
 
-            path = Path(
-                cfg.dataset.stream.path.dir,
-                cfg.dataset.stream.path.fname
-            )
-            paths_imu.append(path)
-
-        ts_sess, x_sess = optk.data.load_imu(
-            paths_imu,
-            use_acc=cfg.dataset.stream.acc,
-            use_gyro=cfg.dataset.stream.gyro,
-            use_quat=cfg.dataset.stream.quat)
-
-        if submission:
-            # For set dummy data.
-            label = np.zeros((len(ts_sess),), dtype=np.int64)
-        else:
-            path = Path(
-                cfg.dataset.annotation.path.dir,
-                cfg.dataset.annotation.path.fname
-            )
-            df_label = optk.data.load_and_resample_operation_labels(
-                path, ts_sess, classes=self.classes)
-            label = df_label[&#34;act_idx&#34;].values
-
-        data.append({
-            &#34;user&#34;: user,
-            &#34;session&#34;: session,
-            &#34;data&#34;: x_sess,
-            &#34;label&#34;: label,
-            &#34;unixtime&#34;: ts_sess,
-        })
-
-        seq_len = ts_sess.shape[0]
-        index += [dict(seq=seq_idx, seg=seg_idx, pos=pos)
-                  for seg_idx, pos in enumerate(range(0, seq_len, window))]
     self.data = data
     self.index = tuple(index)</code></pre>
+</details>
+</dd>
+<dt id="openpack_torch.data.datasets.OpenPackImu.load_single_session"><code class="name flex">
+<span>def <span class="ident">load_single_session</span></span>(<span>self, cfg, submission) ‑> openpack_torch.data._baseclass.SequenceSet</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def load_single_session(self, cfg, submission) -&gt; SequenceSet:
+    data_seq = dict()
+    data_seq[&#34;imu&#34;] = load_imu_wrapper(cfg)
+    base_unixtime_seq = data_seq[&#34;imu&#34;].unixtime
+
+    labels_seq = dict()
+    labels_seq[&#34;annot&#34;] = load_annot_wrapper(
+        cfg, base_unixtime_seq, submission, self.classes
+    )
+
+    ss = SequenceSet(
+        user=cfg.user.name,
+        session=cfg.session,
+        data=data_seq,
+        labels=labels_seq,
+        primary_seqence=&#34;imu&#34;,
+    )
+    return ss</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.data.datasets.OpenPackImu.preprocessing"><code class="name flex">
 <span>def <span class="ident">preprocessing</span></span>(<span>self) ‑> None</span>
 </code></dt>
 <dd>
-<div class="desc"><p>This method is called after <code>load_dataset()</code> and apply preprocessing to loaded data.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def preprocessing(self) -&gt; None:
-    &#34;&#34;&#34;This method is called after ``load_dataset()`` and apply preprocessing to loaded data.
-    &#34;&#34;&#34;
-    logger.warning(&#34;No preprocessing is applied.&#34;)</code></pre>
-</details>
-</dd>
-</dl>
-</dd>
-<dt id="openpack_torch.data.datasets.OpenPackKeypoint"><code class="flex name class">
-<span>class <span class="ident">OpenPackKeypoint</span></span>
-<span>(</span><span>cfg: omegaconf.dictconfig.DictConfig, user_session: Tuple[Tuple[int, int], ...], classes: openpack_toolkit.activity.ActSet = ActSet(classes=(ActClass(id=100, name='Picking', is_ignore=False), ActClass(id=200, name='Relocate Item Label', is_ignore=False), ActClass(id=300, name='Assemble Box', is_ignore=False), ActClass(id=400, name='Insert Items', is_ignore=False), ActClass(id=500, name='Close Box', is_ignore=False), ActClass(id=600, name='Attach Box Label', is_ignore=False), ActClass(id=700, name='Scan Label', is_ignore=False), ActClass(id=800, name='Attach Shipping Label', is_ignore=False), ActClass(id=900, name='Put on Back Table', is_ignore=False), ActClass(id=1000, name='Fill out Order', is_ignore=False), ActClass(id=8100, name='Null', is_ignore=True))), window: int = 900, submission: bool = False, debug: bool = False)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Dataset Class for Keypoint Data.</p>
-<h2 id="attributes">Attributes</h2>
-<dl>
-<dt><strong><code>data</code></strong> :&ensp;<code>List[Dict]</code></dt>
-<dd>shape = (N, 3, FRAMES, VERTEX)</dd>
-<dt><strong><code>index</code></strong> :&ensp;<code>Tuple[Dict]</code></dt>
-<dd>sample index. A dict in this tuple as 3 property.
-<code>seq</code> = sequence index, <code>sqg</code> = segment index which is a sequential number
-within the single sequence. <code>pos</code> = sample index of the start of this segment.</dd>
-<dt><strong><code>classes</code></strong> :&ensp;<code>Tuple[ActClass]</code></dt>
-<dd>list of activity classes.</dd>
-<dt><strong><code>window</code></strong> :&ensp;<code>int</code></dt>
-<dd>window size (=the number of frames per sample)</dd>
-<dt><strong><code>device</code></strong> :&ensp;<code>torch.device</code></dt>
-<dd>-</dd>
-<dt><strong><code>dtype</code></strong> :&ensp;<code>Tuple[torch.dtype,torch.dtype]</code></dt>
-<dd>-</dd>
-</dl>
-<p>Initialize OpenPackKyepoint dataset class.</p>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>cfg</code></strong> :&ensp;<code>DictConfig</code></dt>
-<dd>instance of <code>optk.configs.OpenPackConfig</code>. path, dataset, and
-annotation attributes must be initialized.</dd>
-<dt><strong><code>user_session</code></strong> :&ensp;<code>Tuple[Tuple[int, int], &hellip;]</code></dt>
-<dd><em>description</em></dd>
-<dt><strong><code>classes</code></strong> :&ensp;<code>optk.ActSet</code>, optional</dt>
-<dd>activity set definition.
-Defaults to OPENPACK_OPERATION_CLASSES.</dd>
-<dt><strong><code>window</code></strong> :&ensp;<code>int</code>, optional</dt>
-<dd>window size. Defaults to 15*60 [frames].</dd>
-<dt><strong><code>submission</code></strong> :&ensp;<code>bool</code>, optional</dt>
-<dd><em>description</em>. Defaults to False.</dd>
-<dt><strong><code>debug</code></strong> :&ensp;<code>bool</code>, optional</dt>
-<dd>enable debug mode. Defaults to False.</dd>
-</dl></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class OpenPackKeypoint(torch.utils.data.Dataset):
-    &#34;&#34;&#34;Dataset Class for Keypoint Data.
-
-    Attributes:
-        data (List[Dict]): shape = (N, 3, FRAMES, VERTEX)
-        index (Tuple[Dict]): sample index. A dict in this tuple as 3 property.
-            ``seq`` = sequence index, ``sqg`` = segment index which is a sequential number
-            within the single sequence. ``pos`` = sample index of the start of this segment.
-        classes (Tuple[ActClass]): list of activity classes.
-        window (int): window size (=the number of frames per sample)
-        device (torch.device): -
-        dtype (Tuple[torch.dtype,torch.dtype]): -
-    &#34;&#34;&#34;
-    data: List[Dict] = None
-    index: Tuple[Dict] = None
-
-    def __init__(
-            self,
-            cfg: DictConfig,
-            user_session: Tuple[Tuple[int, int], ...],
-            classes: optk.ActSet = OPENPACK_OPERATIONS,
-            window: int = 15 * 60,
-            submission: bool = False,
-            debug: bool = False,
-    ) -&gt; None:
-        &#34;&#34;&#34;Initialize OpenPackKyepoint dataset class.
-
-        Args:
-            cfg (DictConfig): instance of ``optk.configs.OpenPackConfig``. path, dataset, and
-                annotation attributes must be initialized.
-            user_session (Tuple[Tuple[int, int], ...]): _description_
-            classes (optk.ActSet, optional): activity set definition.
-                Defaults to OPENPACK_OPERATION_CLASSES.
-            window (int, optional): window size. Defaults to 15*60 [frames].
-            submission (bool, optional): _description_. Defaults to False.
-            debug (bool, optional): enable debug mode. Defaults to False.
-        &#34;&#34;&#34;
-        super().__init__()
-        self.window = window
-        self.classes = classes
-        self.submission = submission
-        self.debug = debug
-
-        self.load_dataset(
-            cfg,
-            user_session,
-            submission=submission)
-
-        self.preprocessing()
-
-    def load_dataset(
-        self,
-        cfg: DictConfig,
-        user_session: Tuple[Tuple[int, int], ...],
-        submission: bool = False,
-    ):
-        data, index = [], []
-        for seq_idx, (user, session) in enumerate(user_session):
-            with open_dict(cfg):
-                cfg.user = {&#34;name&#34;: user}
-                cfg.session = session
-
-            path = Path(
-                cfg.dataset.stream.path.dir,
-                cfg.dataset.stream.path.fname,
-            )
-            ts_sess, x_sess = optk.data.load_keypoints(path)
-            x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
-
-            if submission:
-                # For set dummy data.
-                label = np.zeros((len(ts_sess),), dtype=np.int64)
-            else:
-                path = Path(
-                    cfg.dataset.annotation.path.dir,
-                    cfg.dataset.annotation.path.fname
-                )
-                df_label = optk.data.load_and_resample_operation_labels(
-                    path, ts_sess, classes=self.classes)
-                label = df_label[&#34;act_idx&#34;].values
-
-            data.append({
-                &#34;user&#34;: user,
-                &#34;session&#34;: session,
-                &#34;data&#34;: x_sess,
-                &#34;label&#34;: label,
-                &#34;unixtime&#34;: ts_sess,
-            })
-
-            seq_len = x_sess.shape[1]
-            index += [dict(seq=seq_idx, seg=seg_idx, pos=pos)
-                      for seg_idx, pos in enumerate(range(0, seq_len, self.window))]
-
-        self.data = data
-        self.index = tuple(index)
-
-    def preprocessing(self):
-        &#34;&#34;&#34;This method is called after ``load_dataset()`` method and apply preprocessing to loaded data.
-
-        Todo:
-            - [ ] sklearn.preprocessing.StandardScaler()
-            - [ ] DA (half_body_transform)
-                - https://github.com/open-mmlab/mmskeleton/blob/b4c076baa9e02e69b5876c49fa7c509866d902c7/mmskeleton/datasets/estimation.py#L62
-        &#34;&#34;&#34;
-        logger.warning(&#34;No preprocessing is applied.&#34;)
-
-    @ property
-    def num_classes(self) -&gt; int:
-        return len(self.classes)
-
-    def __str__(self) -&gt; str:
-        s = (
-            &#34;OpenPackKeypoint(&#34;
-            f&#34;index={len(self.index)}, &#34;
-            f&#34;num_sequence={len(self.data)}&#34;
-            &#34;)&#34;
-        )
-        return s
-
-    def __len__(self) -&gt; int:
-        return len(self.index)
-
-    def __iter__(self):
-        return self
-
-    def __getitem__(self, index: int) -&gt; Dict:
-        seq_idx, seg_idx = self.index[index][&#34;seq&#34;], self.index[index][&#34;seg&#34;]
-        seq_dict = self.data[seq_idx]
-        seq_len = seq_dict[&#34;data&#34;].shape[1]
-
-        # TODO: Make utilities to extract window from long sequence.
-        head = seg_idx * self.window
-        tail = (seg_idx + 1) * self.window
-        if tail &gt;= seq_len:
-            pad_tail = tail - seq_len
-            tail = seq_len
-        else:
-            pad_tail = 0
-        assert (
-            head &gt;= 0) and (
-            tail &gt; head) and (
-            tail &lt;= seq_len), f&#34;head={head}, tail={tail}&#34;
-
-        x = seq_dict[&#34;data&#34;][:, head:tail]
-        t = seq_dict[&#34;label&#34;][head:tail]
-        ts = seq_dict[&#34;unixtime&#34;][head:tail]
-
-        if pad_tail &gt; 0:
-            x = np.pad(x, [(0, 0), (0, pad_tail), (0, 0)],
-                       mode=&#34;constant&#34;, constant_values=0)
-            t = np.pad(t, [(0, pad_tail)], mode=&#34;constant&#34;,
-                       constant_values=self.classes.get_ignore_class_index())
-            ts = np.pad(ts, [(0, pad_tail)],
-                        mode=&#34;constant&#34;, constant_values=ts[-1])
-
-        x = torch.from_numpy(x)
-        t = torch.from_numpy(t)
-        ts = torch.from_numpy(ts)
-        return {&#34;x&#34;: x, &#34;t&#34;: t, &#34;ts&#34;: ts}</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>torch.utils.data.dataset.Dataset</li>
-<li>typing.Generic</li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="openpack_torch.data.datasets.OpenPackKeypoint.data"><code class="name">var <span class="ident">data</span> : List[Dict]</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="openpack_torch.data.datasets.OpenPackKeypoint.index"><code class="name">var <span class="ident">index</span> : Tuple[Dict]</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Instance variables</h3>
-<dl>
-<dt id="openpack_torch.data.datasets.OpenPackKeypoint.num_classes"><code class="name">var <span class="ident">num_classes</span> : int</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@ property
-def num_classes(self) -&gt; int:
-    return len(self.classes)</code></pre>
-</details>
-</dd>
-</dl>
-<h3>Methods</h3>
-<dl>
-<dt id="openpack_torch.data.datasets.OpenPackKeypoint.load_dataset"><code class="name flex">
-<span>def <span class="ident">load_dataset</span></span>(<span>self, cfg: omegaconf.dictconfig.DictConfig, user_session: Tuple[Tuple[int, int], ...], submission: bool = False)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def load_dataset(
-    self,
-    cfg: DictConfig,
-    user_session: Tuple[Tuple[int, int], ...],
-    submission: bool = False,
-):
-    data, index = [], []
-    for seq_idx, (user, session) in enumerate(user_session):
-        with open_dict(cfg):
-            cfg.user = {&#34;name&#34;: user}
-            cfg.session = session
-
-        path = Path(
-            cfg.dataset.stream.path.dir,
-            cfg.dataset.stream.path.fname,
-        )
-        ts_sess, x_sess = optk.data.load_keypoints(path)
-        x_sess = x_sess[:(x_sess.shape[0] - 1)]  # Remove prediction score.
-
-        if submission:
-            # For set dummy data.
-            label = np.zeros((len(ts_sess),), dtype=np.int64)
-        else:
-            path = Path(
-                cfg.dataset.annotation.path.dir,
-                cfg.dataset.annotation.path.fname
-            )
-            df_label = optk.data.load_and_resample_operation_labels(
-                path, ts_sess, classes=self.classes)
-            label = df_label[&#34;act_idx&#34;].values
-
-        data.append({
-            &#34;user&#34;: user,
-            &#34;session&#34;: session,
-            &#34;data&#34;: x_sess,
-            &#34;label&#34;: label,
-            &#34;unixtime&#34;: ts_sess,
-        })
-
-        seq_len = x_sess.shape[1]
-        index += [dict(seq=seq_idx, seg=seg_idx, pos=pos)
-                  for seg_idx, pos in enumerate(range(0, seq_len, self.window))]
-
-    self.data = data
-    self.index = tuple(index)</code></pre>
-</details>
-</dd>
-<dt id="openpack_torch.data.datasets.OpenPackKeypoint.preprocessing"><code class="name flex">
-<span>def <span class="ident">preprocessing</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>This method is called after <code>load_dataset()</code> method and apply preprocessing to loaded data.</p>
-<h2 id="todo">Todo</h2>
-<ul>
-<li>[ ] sklearn.preprocessing.StandardScaler()</li>
-<li>[ ] DA (half_body_transform)<ul>
-<li><a href="https://github.com/open-mmlab/mmskeleton/blob/b4c076baa9e02e69b5876c49fa7c509866d902c7/mmskeleton/datasets/estimation.py#L62">https://github.com/open-mmlab/mmskeleton/blob/b4c076baa9e02e69b5876c49fa7c509866d902c7/mmskeleton/datasets/estimation.py#L62</a></li>
-</ul>
-</li>
+<div class="desc"><ul>
+<li>Normalize [-3G, +3G] into [0, 1].</li>
 </ul></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def preprocessing(self):
-    &#34;&#34;&#34;This method is called after ``load_dataset()`` method and apply preprocessing to loaded data.
-
-    Todo:
-        - [ ] sklearn.preprocessing.StandardScaler()
-        - [ ] DA (half_body_transform)
-            - https://github.com/open-mmlab/mmskeleton/blob/b4c076baa9e02e69b5876c49fa7c509866d902c7/mmskeleton/datasets/estimation.py#L62
+<pre><code class="python">def preprocessing(self) -&gt; None:
     &#34;&#34;&#34;
-    logger.warning(&#34;No preprocessing is applied.&#34;)</code></pre>
+    * Normalize [-3G, +3G] into [0, 1].
+    &#34;&#34;&#34;
+    # NOTE: Normalize ACC data. ([-3G, +3G] -&gt; [0, 1])
+    # NOTE: Described in Appendix Sec.3.2.
+    is_agq = (
+        self.cfg.dataset.stream.spec.imu.gyro
+        and self.cfg.dataset.stream.spec.imu.quat
+    )
+    devices = self.cfg.dataset.stream.spec.imu.devices
+
+    for ss in self.data:
+        x = ss.data.get(&#34;imu&#34;).data
+        if is_agq:
+            for i, device in enumerate(devices):
+                # ACC
+                dims = [10 * i + 0, 10 * i + 1, 10 * i + 2]
+                x[dims] = np.clip(x[dims], -3, +3)
+                x[dims] = (x[dims] + 3.0) / 6.0
+                # Gyro
+                for j, ch in enumerate([&#34;x&#34;, &#34;y&#34;, &#34;z&#34;]):
+                    dim = 10 * i + (3 + j)
+                    mean = (
+                        self.cfg.dataset.stream.spec.imu.stats[device].gyro[ch].mean
+                    )
+                    std = (
+                        self.cfg.dataset.stream.spec.imu.stats[device].gyro[ch].std
+                    )
+                    x[dim] = (x[dim] - mean) / std
+        else:
+            x = np.clip(x, -3, +3)
+            x = (x + 3.0) / 6.0
+        ss.data.get(&#34;imu&#34;).data = x</code></pre>
 </details>
 </dd>
 </dl>
@@ -1121,26 +1697,52 @@ def num_classes(self) -&gt; int:
 <li><code><a title="openpack_torch.data" href="index.html">openpack_torch.data</a></code></li>
 </ul>
 </li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="openpack_torch.data.datasets.random_window_shift" href="#openpack_torch.data.datasets.random_window_shift">random_window_shift</a></code></li>
+</ul>
+</li>
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
 <li>
-<h4><code><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></code></h4>
+<h4><code><a title="openpack_torch.data.datasets.ImuBoundaryDataset" href="#openpack_torch.data.datasets.ImuBoundaryDataset">ImuBoundaryDataset</a></code></h4>
 <ul class="">
-<li><code><a title="openpack_torch.data.datasets.OpenPackImu.data" href="#openpack_torch.data.datasets.OpenPackImu.data">data</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackImu.index" href="#openpack_torch.data.datasets.OpenPackImu.index">index</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackImu.load_dataset" href="#openpack_torch.data.datasets.OpenPackImu.load_dataset">load_dataset</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackImu.num_classes" href="#openpack_torch.data.datasets.OpenPackImu.num_classes">num_classes</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackImu.preprocessing" href="#openpack_torch.data.datasets.OpenPackImu.preprocessing">preprocessing</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.ImuBoundaryDataset.preprocessing" href="#openpack_torch.data.datasets.ImuBoundaryDataset.preprocessing">preprocessing</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.ImuBoundaryDataset.tensor_set_config" href="#openpack_torch.data.datasets.ImuBoundaryDataset.tensor_set_config">tensor_set_config</a></code></li>
 </ul>
 </li>
 <li>
-<h4><code><a title="openpack_torch.data.datasets.OpenPackKeypoint" href="#openpack_torch.data.datasets.OpenPackKeypoint">OpenPackKeypoint</a></code></h4>
+<h4><code><a title="openpack_torch.data.datasets.ImuBoundaryIoTDataset" href="#openpack_torch.data.datasets.ImuBoundaryIoTDataset">ImuBoundaryIoTDataset</a></code></h4>
 <ul class="">
-<li><code><a title="openpack_torch.data.datasets.OpenPackKeypoint.data" href="#openpack_torch.data.datasets.OpenPackKeypoint.data">data</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackKeypoint.index" href="#openpack_torch.data.datasets.OpenPackKeypoint.index">index</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackKeypoint.load_dataset" href="#openpack_torch.data.datasets.OpenPackKeypoint.load_dataset">load_dataset</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackKeypoint.num_classes" href="#openpack_torch.data.datasets.OpenPackKeypoint.num_classes">num_classes</a></code></li>
-<li><code><a title="openpack_torch.data.datasets.OpenPackKeypoint.preprocessing" href="#openpack_torch.data.datasets.OpenPackKeypoint.preprocessing">preprocessing</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.ImuBoundaryIoTDataset.preprocessing" href="#openpack_torch.data.datasets.ImuBoundaryIoTDataset.preprocessing">preprocessing</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.ImuBoundaryIoTDataset.tensor_set_config" href="#openpack_torch.data.datasets.ImuBoundaryIoTDataset.tensor_set_config">tensor_set_config</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="openpack_torch.data.datasets.ImuIoTDataset" href="#openpack_torch.data.datasets.ImuIoTDataset">ImuIoTDataset</a></code></h4>
+<ul class="">
+<li><code><a title="openpack_torch.data.datasets.ImuIoTDataset.load_single_session" href="#openpack_torch.data.datasets.ImuIoTDataset.load_single_session">load_single_session</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.ImuIoTDataset.tensor_set_config" href="#openpack_torch.data.datasets.ImuIoTDataset.tensor_set_config">tensor_set_config</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="openpack_torch.data.datasets.Kinect2dKptDataset" href="#openpack_torch.data.datasets.Kinect2dKptDataset">Kinect2dKptDataset</a></code></h4>
+<ul class="">
+<li><code><a title="openpack_torch.data.datasets.Kinect2dKptDataset.load_single_session" href="#openpack_torch.data.datasets.Kinect2dKptDataset.load_single_session">load_single_session</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.Kinect2dKptDataset.preprocessing" href="#openpack_torch.data.datasets.Kinect2dKptDataset.preprocessing">preprocessing</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.Kinect2dKptDataset.tensor_set_config" href="#openpack_torch.data.datasets.Kinect2dKptDataset.tensor_set_config">tensor_set_config</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="openpack_torch.data.datasets.OpenPackImu" href="#openpack_torch.data.datasets.OpenPackImu">OpenPackImu</a></code></h4>
+<ul class="two-column">
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.data" href="#openpack_torch.data.datasets.OpenPackImu.data">data</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.index" href="#openpack_torch.data.datasets.OpenPackImu.index">index</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.load_dataset" href="#openpack_torch.data.datasets.OpenPackImu.load_dataset">load_dataset</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.load_single_session" href="#openpack_torch.data.datasets.OpenPackImu.load_single_session">load_single_session</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.num_classes" href="#openpack_torch.data.datasets.OpenPackImu.num_classes">num_classes</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.preprocessing" href="#openpack_torch.data.datasets.OpenPackImu.preprocessing">preprocessing</a></code></li>
+<li><code><a title="openpack_torch.data.datasets.OpenPackImu.tensor_set_config" href="#openpack_torch.data.datasets.OpenPackImu.tensor_set_config">tensor_set_config</a></code></li>
 </ul>
 </li>
 </ul>

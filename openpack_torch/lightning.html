@@ -40,10 +40,11 @@ from torchmetrics.functional import accuracy as accuracy_score
 logger = getLogger(__name__)
 
 
-class BaseLightningModule(pl.LightningModule):
-    log_dict: Dict[str, List] = {&#34;train&#34;: [], &#34;val&#34;: [], &#34;test&#34;: []}
-    log_keys: Tuple[str, ...] = (&#34;loss&#34;, &#34;acc&#34;)
+class EarlyStopError(Exception):
+    pass
 
+
+class BaseLightningModule(pl.LightningModule):
     def __init__(self, cfg: DictConfig = None) -&gt; None:
         self.cfg = cfg
         super().__init__()
@@ -51,7 +52,9 @@ class BaseLightningModule(pl.LightningModule):
         self.net: nn.Module = self.init_model(cfg)
         self.criterion: nn.Module = self.init_criterion(cfg)
 
-    def init_model(self, cfg) -&gt; torch.nn.Module:
+        self.test_step_outputs: List = []
+
+    def init_model(self, cfg: DictConfig) -&gt; torch.nn.Module:
         raise NotImplementedError()
 
     def init_criterion(self, cfg: DictConfig):
@@ -59,16 +62,54 @@ class BaseLightningModule(pl.LightningModule):
         return criterion
 
     def configure_optimizers(self) -&gt; torch.optim.Optimizer:
-        if self.cfg.train.optimizer.type == &#34;Adam&#34;:
+        # == Optimizer ==
+        if self.cfg.optimizer.type == &#34;SGD&#34;:
+            logger.info(f&#34;SGD optimizer is selected! (lr={self.cfg.optimizer.lr})&#34;)
+            optimizer = torch.optim.SGD(
+                self.parameters(),
+                lr=self.cfg.optimizer.lr,
+                momentum=self.cfg.optimizer.momentum,
+                weight_decay=self.cfg.optimizer.weight_decay,
+            )
+        elif self.cfg.optimizer.type == &#34;Adam&#34;:
+            logger.info(f&#34;Adam optimizer is selected! (lr={self.cfg.optimizer.lr})&#34;)
             optimizer = torch.optim.Adam(
                 self.parameters(),
-                lr=self.cfg.train.optimizer.lr,
-                weight_decay=self.cfg.train.optimizer.weight_decay,
+                lr=self.cfg.optimizer.lr,
+                weight_decay=self.cfg.optimizer.weight_decay,
             )
         else:
-            raise ValueError(
-                f&#34;{self.cfg.train.optimizer.type} is not supported.&#34;)
-        return optimizer
+            raise ValueError(f&#34;{self.cfg.optimizer.type} is not supported.&#34;)
+
+        # == LR Scheduler ==
+        if self.cfg.optimizer.scheduler.type == &#34;None&#34;:
+            logger.info(&#34;No scheduler is applied.&#34;)
+            return optimizer
+        elif self.cfg.optimizer.scheduler.type == &#34;StepLR&#34;:
+            logger.info(&#34;StepLR scheduler is selected.&#34;)
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer,
+                step_size=self.cfg.optimizer.scheduler.step_size,
+                gamma=self.cfg.optimizer.scheduler.gamma,
+            )
+        elif self.cfg.optimizer.scheduler.type == &#34;ExponentialLR&#34;:
+            logger.info(&#34;StepLR scheduler is selected.&#34;)
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optimizer,
+                gamma=self.cfg.optimizer.scheduler.gamma,
+            )
+        elif self.cfg.optimizer.scheduler.type == &#34;CosineAnnealing&#34;:
+            logger.info(&#34;CosineAnnealing scheduler is selected.&#34;)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=self.cfg.optimizer.scheduler.CosineAnnealing.T_max,
+                eta_min=self.cfg.optimizer.scheduler.CosineAnnealing.eta_min,
+                verbose=True,
+            )
+        else:
+            raise ValueError()
+
+        return {&#34;optimizer&#34;: optimizer, &#34;lr_scheduler&#34;: scheduler}
 
     def calc_accuracy(self, y: torch.Tensor, t: torch.Tensor) -&gt; torch.Tensor:
         &#34;&#34;&#34;Returns accuracy score.
@@ -83,7 +124,8 @@ class BaseLightningModule(pl.LightningModule):
         preds = F.softmax(y, dim=1)
         (batch_size, num_classes, window_size) = preds.size()
         preds_flat = preds.permute(1, 0, 2).reshape(
-            num_classes, batch_size * window_size)
+            num_classes, batch_size * window_size
+        )
         t_flat = t.reshape(-1)
 
         # FIXME: I want to use macro average score.
@@ -101,56 +143,48 @@ class BaseLightningModule(pl.LightningModule):
     def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
         return self.net(x)
 
-    def training_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
+    def train_val_common_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         raise NotImplementedError()
 
-    def training_epoch_end(self, outputs):
-        log = dict()
-        for key in self.log_keys:
-            vals = [x[key] for x in outputs if key in x.keys()]
-            if len(vals) &gt; 0:
-                log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
-        self.log_dict[&#34;train&#34;].append(log)
+    def training_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
+        output = self.train_val_common_step(batch, batch_idx)
+
+        train_output = {f&#34;train/{key}&#34;: val for key, val in output.items()}
+        self.log_dict(
+            train_output,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        return output
 
     def validation_step(
-            self,
-            batch: Dict,
-            batch_idx: int,
-            dataloader_idx: int = 0) -&gt; Dict:
-        return self.training_step(batch, batch_idx)
+        self, batch: Dict, batch_idx: int, dataloader_idx: int = 0
+    ) -&gt; Dict:
+        output = self.train_val_common_step(batch, batch_idx)
 
-    def validation_epoch_end(self, outputs):
-        if isinstance(outputs[0], list):
-            # When multiple dataloader is used.
-            _outputs = []
-            for out in outputs:
-                _outputs += out
-            outputs = _outputs
-
-        log = dict()
-        for key in self.log_keys:
-            vals = [x[key] for x in outputs if key in x.keys()]
-            if len(vals) &gt; 0:
-                avg = torch.stack(vals).mean().item()
-                log[f&#34;val/{key}&#34;] = avg
-        self.log_dict[&#34;val&#34;].append(log)
-
-        self.print_latest_metrics()
-
-        if len(self.log_dict[&#34;val&#34;]) &gt; 0:
-            val_loss = self.log_dict[&#34;val&#34;][-1].get(&#34;val/loss&#34;, None)
-            self.log(
-                &#34;val/loss&#34;,
-                val_loss,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=False,
-                logger=True)
+        train_output = {f&#34;val/{key}&#34;: val for key, val in output.items()}
+        self.log_dict(
+            train_output,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        return output
 
     def test_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         raise NotImplementedError()
 
-    def test_epoch_end(self, outputs):
+    def on_test_epoch_end(self):
+        if len(self.test_step_outputs) == 0:
+            raise ValueError(
+                &#34;Size of test_step_outputs is 0. Did you forgot to call &#34;
+                &#34;`self.test_step_outputs.append(outputs)` in test_step()?&#34;
+            )
+        outputs = self.test_step_outputs
+
         keys = tuple(outputs[0].keys())
         results = {key: [] for key in keys}
         for d in outputs:
@@ -162,26 +196,9 @@ class BaseLightningModule(pl.LightningModule):
 
         self.test_results = results
 
-    def print_latest_metrics(self) -&gt; None:
-        # -- Logging --
-        train_log = self.log_dict[&#34;train&#34;][-1] if len(
-            self.log_dict[&#34;train&#34;]) &gt; 0 else dict()
-        val_log = self.log_dict[&#34;val&#34;][-1] if len(
-            self.log_dict[&#34;val&#34;]) &gt; 0 else dict()
-        log_template = (
-            &#34;Epoch[{epoch:0=3}]&#34;
-            &#34; TRAIN: loss={train_loss:&gt;7.4f}, acc={train_acc:&gt;7.4f}&#34;
-            &#34; | VAL: loss={val_loss:&gt;7.4f}, acc={val_acc:&gt;7.4f}&#34;
-        )
-        logger.info(
-            log_template.format(
-                epoch=self.current_epoch,
-                train_loss=train_log.get(&#34;train/loss&#34;, -1),
-                train_acc=train_log.get(&#34;train/acc&#34;, -1),
-                val_loss=val_log.get(&#34;val/loss&#34;, -1),
-                val_acc=val_log.get(&#34;val/acc&#34;, -1),
-            )
-        )</code></pre>
+    def clear_test_outputs(self):
+        self.test_step_outputs = []
+        self.test_results = None</code></pre>
 </details>
 </section>
 <section>
@@ -204,9 +221,6 @@ class BaseLightningModule(pl.LightningModule):
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class BaseLightningModule(pl.LightningModule):
-    log_dict: Dict[str, List] = {&#34;train&#34;: [], &#34;val&#34;: [], &#34;test&#34;: []}
-    log_keys: Tuple[str, ...] = (&#34;loss&#34;, &#34;acc&#34;)
-
     def __init__(self, cfg: DictConfig = None) -&gt; None:
         self.cfg = cfg
         super().__init__()
@@ -214,7 +228,9 @@ class BaseLightningModule(pl.LightningModule):
         self.net: nn.Module = self.init_model(cfg)
         self.criterion: nn.Module = self.init_criterion(cfg)
 
-    def init_model(self, cfg) -&gt; torch.nn.Module:
+        self.test_step_outputs: List = []
+
+    def init_model(self, cfg: DictConfig) -&gt; torch.nn.Module:
         raise NotImplementedError()
 
     def init_criterion(self, cfg: DictConfig):
@@ -222,16 +238,54 @@ class BaseLightningModule(pl.LightningModule):
         return criterion
 
     def configure_optimizers(self) -&gt; torch.optim.Optimizer:
-        if self.cfg.train.optimizer.type == &#34;Adam&#34;:
+        # == Optimizer ==
+        if self.cfg.optimizer.type == &#34;SGD&#34;:
+            logger.info(f&#34;SGD optimizer is selected! (lr={self.cfg.optimizer.lr})&#34;)
+            optimizer = torch.optim.SGD(
+                self.parameters(),
+                lr=self.cfg.optimizer.lr,
+                momentum=self.cfg.optimizer.momentum,
+                weight_decay=self.cfg.optimizer.weight_decay,
+            )
+        elif self.cfg.optimizer.type == &#34;Adam&#34;:
+            logger.info(f&#34;Adam optimizer is selected! (lr={self.cfg.optimizer.lr})&#34;)
             optimizer = torch.optim.Adam(
                 self.parameters(),
-                lr=self.cfg.train.optimizer.lr,
-                weight_decay=self.cfg.train.optimizer.weight_decay,
+                lr=self.cfg.optimizer.lr,
+                weight_decay=self.cfg.optimizer.weight_decay,
             )
         else:
-            raise ValueError(
-                f&#34;{self.cfg.train.optimizer.type} is not supported.&#34;)
-        return optimizer
+            raise ValueError(f&#34;{self.cfg.optimizer.type} is not supported.&#34;)
+
+        # == LR Scheduler ==
+        if self.cfg.optimizer.scheduler.type == &#34;None&#34;:
+            logger.info(&#34;No scheduler is applied.&#34;)
+            return optimizer
+        elif self.cfg.optimizer.scheduler.type == &#34;StepLR&#34;:
+            logger.info(&#34;StepLR scheduler is selected.&#34;)
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer,
+                step_size=self.cfg.optimizer.scheduler.step_size,
+                gamma=self.cfg.optimizer.scheduler.gamma,
+            )
+        elif self.cfg.optimizer.scheduler.type == &#34;ExponentialLR&#34;:
+            logger.info(&#34;StepLR scheduler is selected.&#34;)
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optimizer,
+                gamma=self.cfg.optimizer.scheduler.gamma,
+            )
+        elif self.cfg.optimizer.scheduler.type == &#34;CosineAnnealing&#34;:
+            logger.info(&#34;CosineAnnealing scheduler is selected.&#34;)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=self.cfg.optimizer.scheduler.CosineAnnealing.T_max,
+                eta_min=self.cfg.optimizer.scheduler.CosineAnnealing.eta_min,
+                verbose=True,
+            )
+        else:
+            raise ValueError()
+
+        return {&#34;optimizer&#34;: optimizer, &#34;lr_scheduler&#34;: scheduler}
 
     def calc_accuracy(self, y: torch.Tensor, t: torch.Tensor) -&gt; torch.Tensor:
         &#34;&#34;&#34;Returns accuracy score.
@@ -246,7 +300,8 @@ class BaseLightningModule(pl.LightningModule):
         preds = F.softmax(y, dim=1)
         (batch_size, num_classes, window_size) = preds.size()
         preds_flat = preds.permute(1, 0, 2).reshape(
-            num_classes, batch_size * window_size)
+            num_classes, batch_size * window_size
+        )
         t_flat = t.reshape(-1)
 
         # FIXME: I want to use macro average score.
@@ -264,56 +319,48 @@ class BaseLightningModule(pl.LightningModule):
     def forward(self, x: torch.Tensor) -&gt; torch.Tensor:
         return self.net(x)
 
-    def training_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
+    def train_val_common_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         raise NotImplementedError()
 
-    def training_epoch_end(self, outputs):
-        log = dict()
-        for key in self.log_keys:
-            vals = [x[key] for x in outputs if key in x.keys()]
-            if len(vals) &gt; 0:
-                log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
-        self.log_dict[&#34;train&#34;].append(log)
+    def training_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
+        output = self.train_val_common_step(batch, batch_idx)
+
+        train_output = {f&#34;train/{key}&#34;: val for key, val in output.items()}
+        self.log_dict(
+            train_output,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        return output
 
     def validation_step(
-            self,
-            batch: Dict,
-            batch_idx: int,
-            dataloader_idx: int = 0) -&gt; Dict:
-        return self.training_step(batch, batch_idx)
+        self, batch: Dict, batch_idx: int, dataloader_idx: int = 0
+    ) -&gt; Dict:
+        output = self.train_val_common_step(batch, batch_idx)
 
-    def validation_epoch_end(self, outputs):
-        if isinstance(outputs[0], list):
-            # When multiple dataloader is used.
-            _outputs = []
-            for out in outputs:
-                _outputs += out
-            outputs = _outputs
-
-        log = dict()
-        for key in self.log_keys:
-            vals = [x[key] for x in outputs if key in x.keys()]
-            if len(vals) &gt; 0:
-                avg = torch.stack(vals).mean().item()
-                log[f&#34;val/{key}&#34;] = avg
-        self.log_dict[&#34;val&#34;].append(log)
-
-        self.print_latest_metrics()
-
-        if len(self.log_dict[&#34;val&#34;]) &gt; 0:
-            val_loss = self.log_dict[&#34;val&#34;][-1].get(&#34;val/loss&#34;, None)
-            self.log(
-                &#34;val/loss&#34;,
-                val_loss,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=False,
-                logger=True)
+        train_output = {f&#34;val/{key}&#34;: val for key, val in output.items()}
+        self.log_dict(
+            train_output,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        return output
 
     def test_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
         raise NotImplementedError()
 
-    def test_epoch_end(self, outputs):
+    def on_test_epoch_end(self):
+        if len(self.test_step_outputs) == 0:
+            raise ValueError(
+                &#34;Size of test_step_outputs is 0. Did you forgot to call &#34;
+                &#34;`self.test_step_outputs.append(outputs)` in test_step()?&#34;
+            )
+        outputs = self.test_step_outputs
+
         keys = tuple(outputs[0].keys())
         results = {key: [] for key in keys}
         for d in outputs:
@@ -325,49 +372,20 @@ class BaseLightningModule(pl.LightningModule):
 
         self.test_results = results
 
-    def print_latest_metrics(self) -&gt; None:
-        # -- Logging --
-        train_log = self.log_dict[&#34;train&#34;][-1] if len(
-            self.log_dict[&#34;train&#34;]) &gt; 0 else dict()
-        val_log = self.log_dict[&#34;val&#34;][-1] if len(
-            self.log_dict[&#34;val&#34;]) &gt; 0 else dict()
-        log_template = (
-            &#34;Epoch[{epoch:0=3}]&#34;
-            &#34; TRAIN: loss={train_loss:&gt;7.4f}, acc={train_acc:&gt;7.4f}&#34;
-            &#34; | VAL: loss={val_loss:&gt;7.4f}, acc={val_acc:&gt;7.4f}&#34;
-        )
-        logger.info(
-            log_template.format(
-                epoch=self.current_epoch,
-                train_loss=train_log.get(&#34;train/loss&#34;, -1),
-                train_acc=train_log.get(&#34;train/acc&#34;, -1),
-                val_loss=val_log.get(&#34;val/loss&#34;, -1),
-                val_acc=val_log.get(&#34;val/acc&#34;, -1),
-            )
-        )</code></pre>
+    def clear_test_outputs(self):
+        self.test_step_outputs = []
+        self.test_results = None</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li>pytorch_lightning.core.module.LightningModule</li>
 <li>lightning_fabric.utilities.device_dtype_mixin._DeviceDtypeModuleMixin</li>
 <li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
-<li>pytorch_lightning.core.saving.ModelIO</li>
 <li>pytorch_lightning.core.hooks.ModelHooks</li>
 <li>pytorch_lightning.core.hooks.DataHooks</li>
 <li>pytorch_lightning.core.hooks.CheckpointHooks</li>
 <li>torch.nn.modules.module.Module</li>
 </ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="openpack_torch.lightning.BaseLightningModule.log_dict"><code class="name">var <span class="ident">log_dict</span> : Dict[str, List]</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="openpack_torch.lightning.BaseLightningModule.log_keys"><code class="name">var <span class="ident">log_keys</span> : Tuple[str, ...]</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
 <h3>Methods</h3>
 <dl>
 <dt id="openpack_torch.lightning.BaseLightningModule.calc_accuracy"><code class="name flex">
@@ -404,7 +422,8 @@ class BaseLightningModule(pl.LightningModule):
     preds = F.softmax(y, dim=1)
     (batch_size, num_classes, window_size) = preds.size()
     preds_flat = preds.permute(1, 0, 2).reshape(
-        num_classes, batch_size * window_size)
+        num_classes, batch_size * window_size
+    )
     t_flat = t.reshape(-1)
 
     # FIXME: I want to use macro average score.
@@ -420,12 +439,27 @@ class BaseLightningModule(pl.LightningModule):
     return acc</code></pre>
 </details>
 </dd>
+<dt id="openpack_torch.lightning.BaseLightningModule.clear_test_outputs"><code class="name flex">
+<span>def <span class="ident">clear_test_outputs</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def clear_test_outputs(self):
+    self.test_step_outputs = []
+    self.test_results = None</code></pre>
+</details>
+</dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.configure_optimizers"><code class="name flex">
 <span>def <span class="ident">configure_optimizers</span></span>(<span>self) ‑> torch.optim.optimizer.Optimizer</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Choose what optimizers and learning-rate schedulers to use in your optimization.
-Normally you'd need one. But in the case of GANs or similar you might have multiple.</p>
+<div class="desc"><p>Choose what optimizers and learning-rate schedulers to use in your optimization. Normally you'd need one.
+But in the case of GANs or similar you might have multiple. Optimization with multiple optimizers only works in
+the manual optimization mode.</p>
 <h2 id="return">Return</h2>
 <p>Any of these 6 options.</p>
 <ul>
@@ -435,7 +469,6 @@ Normally you'd need one. But in the case of GANs or similar you might have multi
 (or multiple <code>lr_scheduler_config</code>).</li>
 <li><strong>Dictionary</strong>, with an <code>"optimizer"</code> key, and (optionally) a <code>"lr_scheduler"</code>
 key whose value is a single LR scheduler or <code>lr_scheduler_config</code>.</li>
-<li><strong>Tuple of dictionaries</strong> as described above, with an optional <code>"frequency"</code> key.</li>
 <li><strong>None</strong> - Fit will run without any optimizer.</li>
 </ul>
 <p>The <code>lr_scheduler_config</code> is a dictionary which contains the scheduler and its associated configuration.
@@ -501,102 +534,73 @@ return (
 )</p>
 </div>
 <p>Metrics can be made available to monitor by simply logging it using
-<code>self.log('metric_to_track', metric_val)</code> in your :class:<code>~pytorch_lightning.core.module.LightningModule</code>.</p>
+<code>self.log('metric_to_track', metric_val)</code> in your :class:<code>~pytorch_lightning.core.LightningModule</code>.</p>
 <h2 id="note">Note</h2>
-<p>The <code>frequency</code> value specified in a dict along with the <code>optimizer</code> key is an int corresponding
-to the number of sequential batches optimized with the specific optimizer.
-It should be given to none or to all of the optimizers.
-There is a difference between passing multiple optimizers in a list,
-and passing multiple optimizers in dictionaries with a frequency of 1:</p>
-<pre><code>- In the former case, all optimizers will operate on the given batch in each optimization step.
-- In the latter, only one optimizer will operate on the given batch at every step.
-</code></pre>
-<p>This is different from the <code>frequency</code> value specified in the <code>lr_scheduler_config</code> mentioned above.</p>
-<p>.. code-block:: python</p>
-<pre><code>def configure_optimizers(self):
-    optimizer_one = torch.optim.SGD(self.model.parameters(), lr=0.01)
-    optimizer_two = torch.optim.SGD(self.model.parameters(), lr=0.01)
-    return [
-        {"optimizer": optimizer_one, "frequency": 5},
-        {"optimizer": optimizer_two, "frequency": 10},
-    ]
-</code></pre>
-<p>In this example, the first optimizer will be used for the first 5 steps,
-the second optimizer for the next 10 steps and that cycle will continue.
-If an LR scheduler is specified for an optimizer using the <code>lr_scheduler</code> key in the above dict,
-the scheduler will only be updated when its optimizer is being used.</p>
-<p>Examples::</p>
-<pre><code># most cases. no learning rate scheduler
-def configure_optimizers(self):
-    return Adam(self.parameters(), lr=1e-3)
-
-# multiple optimizer case (e.g.: GAN)
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    return gen_opt, dis_opt
-
-# example with learning rate schedulers
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    dis_sch = CosineAnnealing(dis_opt, T_max=10)
-    return [gen_opt, dis_opt], [dis_sch]
-
-# example with step-based learning rate schedulers
-# each optimizer has its own scheduler
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    gen_sch = {
-        'scheduler': ExponentialLR(gen_opt, 0.99),
-        'interval': 'step'  # called after each training step
-    }
-    dis_sch = CosineAnnealing(dis_opt, T_max=10) # called every epoch
-    return [gen_opt, dis_opt], [gen_sch, dis_sch]
-
-# example with optimizer frequencies
-# see training procedure in &lt;code&gt;Improved Training of Wasserstein GANs&lt;/code&gt;, Algorithm 1
-# &lt;https://arxiv.org/abs/1704.00028&gt;
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    n_critic = 5
-    return (
-        {'optimizer': dis_opt, 'frequency': n_critic},
-        {'optimizer': gen_opt, 'frequency': 1}
-    )
-</code></pre>
-<h2 id="note_1">Note</h2>
 <p>Some things to know:</p>
 <ul>
-<li>Lightning calls <code>.backward()</code> and <code>.step()</code> on each optimizer as needed.</li>
-<li>If learning rate scheduler is specified in <code>configure_optimizers()</code> with key
+<li>Lightning calls <code>.backward()</code> and <code>.step()</code> automatically in case of automatic optimization.</li>
+<li>If a learning rate scheduler is specified in <code>configure_optimizers()</code> with key
 <code>"interval"</code> (default "epoch") in the scheduler configuration, Lightning will call
 the scheduler's <code>.step()</code> method automatically in case of automatic optimization.</li>
-<li>If you use 16-bit precision (<code>precision=16</code>), Lightning will automatically handle the optimizers.</li>
-<li>If you use multiple optimizers, :meth:<code>training_step</code> will have an additional <code>optimizer_idx</code> parameter.</li>
+<li>If you use 16-bit precision (<code>precision=16</code>), Lightning will automatically handle the optimizer.</li>
 <li>If you use :class:<code>torch.optim.LBFGS</code>, Lightning handles the closure function automatically for you.</li>
-<li>If you use multiple optimizers, gradients will be calculated only for the parameters of current optimizer
-at each training step.</li>
-<li>If you need to control how often those optimizers step or override the default <code>.step()</code> schedule,
-override the :meth:<code>optimizer_step</code> hook.</li>
+<li>If you use multiple optimizers, you will have to switch to 'manual optimization' mode and step them
+yourself.</li>
+<li>If you need to control how often the optimizer steps, override the :meth:<code>optimizer_step</code> hook.</li>
 </ul></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def configure_optimizers(self) -&gt; torch.optim.Optimizer:
-    if self.cfg.train.optimizer.type == &#34;Adam&#34;:
+    # == Optimizer ==
+    if self.cfg.optimizer.type == &#34;SGD&#34;:
+        logger.info(f&#34;SGD optimizer is selected! (lr={self.cfg.optimizer.lr})&#34;)
+        optimizer = torch.optim.SGD(
+            self.parameters(),
+            lr=self.cfg.optimizer.lr,
+            momentum=self.cfg.optimizer.momentum,
+            weight_decay=self.cfg.optimizer.weight_decay,
+        )
+    elif self.cfg.optimizer.type == &#34;Adam&#34;:
+        logger.info(f&#34;Adam optimizer is selected! (lr={self.cfg.optimizer.lr})&#34;)
         optimizer = torch.optim.Adam(
             self.parameters(),
-            lr=self.cfg.train.optimizer.lr,
-            weight_decay=self.cfg.train.optimizer.weight_decay,
+            lr=self.cfg.optimizer.lr,
+            weight_decay=self.cfg.optimizer.weight_decay,
         )
     else:
-        raise ValueError(
-            f&#34;{self.cfg.train.optimizer.type} is not supported.&#34;)
-    return optimizer</code></pre>
+        raise ValueError(f&#34;{self.cfg.optimizer.type} is not supported.&#34;)
+
+    # == LR Scheduler ==
+    if self.cfg.optimizer.scheduler.type == &#34;None&#34;:
+        logger.info(&#34;No scheduler is applied.&#34;)
+        return optimizer
+    elif self.cfg.optimizer.scheduler.type == &#34;StepLR&#34;:
+        logger.info(&#34;StepLR scheduler is selected.&#34;)
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=self.cfg.optimizer.scheduler.step_size,
+            gamma=self.cfg.optimizer.scheduler.gamma,
+        )
+    elif self.cfg.optimizer.scheduler.type == &#34;ExponentialLR&#34;:
+        logger.info(&#34;StepLR scheduler is selected.&#34;)
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            optimizer,
+            gamma=self.cfg.optimizer.scheduler.gamma,
+        )
+    elif self.cfg.optimizer.scheduler.type == &#34;CosineAnnealing&#34;:
+        logger.info(&#34;CosineAnnealing scheduler is selected.&#34;)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.cfg.optimizer.scheduler.CosineAnnealing.T_max,
+            eta_min=self.cfg.optimizer.scheduler.CosineAnnealing.eta_min,
+            verbose=True,
+        )
+    else:
+        raise ValueError()
+
+    return {&#34;optimizer&#34;: optimizer, &#34;lr_scheduler&#34;: scheduler}</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.forward"><code class="name flex">
@@ -636,7 +640,7 @@ override the :meth:<code>optimizer_step</code> hook.</li>
 </details>
 </dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.init_model"><code class="name flex">
-<span>def <span class="ident">init_model</span></span>(<span>self, cfg) ‑> torch.nn.modules.module.Module</span>
+<span>def <span class="ident">init_model</span></span>(<span>self, cfg: omegaconf.dictconfig.DictConfig) ‑> torch.nn.modules.module.Module</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -644,92 +648,27 @@ override the :meth:<code>optimizer_step</code> hook.</li>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def init_model(self, cfg) -&gt; torch.nn.Module:
+<pre><code class="python">def init_model(self, cfg: DictConfig) -&gt; torch.nn.Module:
     raise NotImplementedError()</code></pre>
 </details>
 </dd>
-<dt id="openpack_torch.lightning.BaseLightningModule.print_latest_metrics"><code class="name flex">
-<span>def <span class="ident">print_latest_metrics</span></span>(<span>self) ‑> None</span>
+<dt id="openpack_torch.lightning.BaseLightningModule.on_test_epoch_end"><code class="name flex">
+<span>def <span class="ident">on_test_epoch_end</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Called in the test loop at the very end of the epoch.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def print_latest_metrics(self) -&gt; None:
-    # -- Logging --
-    train_log = self.log_dict[&#34;train&#34;][-1] if len(
-        self.log_dict[&#34;train&#34;]) &gt; 0 else dict()
-    val_log = self.log_dict[&#34;val&#34;][-1] if len(
-        self.log_dict[&#34;val&#34;]) &gt; 0 else dict()
-    log_template = (
-        &#34;Epoch[{epoch:0=3}]&#34;
-        &#34; TRAIN: loss={train_loss:&gt;7.4f}, acc={train_acc:&gt;7.4f}&#34;
-        &#34; | VAL: loss={val_loss:&gt;7.4f}, acc={val_acc:&gt;7.4f}&#34;
-    )
-    logger.info(
-        log_template.format(
-            epoch=self.current_epoch,
-            train_loss=train_log.get(&#34;train/loss&#34;, -1),
-            train_acc=train_log.get(&#34;train/acc&#34;, -1),
-            val_loss=val_log.get(&#34;val/loss&#34;, -1),
-            val_acc=val_log.get(&#34;val/acc&#34;, -1),
+<pre><code class="python">def on_test_epoch_end(self):
+    if len(self.test_step_outputs) == 0:
+        raise ValueError(
+            &#34;Size of test_step_outputs is 0. Did you forgot to call &#34;
+            &#34;`self.test_step_outputs.append(outputs)` in test_step()?&#34;
         )
-    )</code></pre>
-</details>
-</dd>
-<dt id="openpack_torch.lightning.BaseLightningModule.test_epoch_end"><code class="name flex">
-<span>def <span class="ident">test_epoch_end</span></span>(<span>self, outputs)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Called at the end of a test epoch with the output of all test steps.</p>
-<p>.. code-block:: python</p>
-<pre><code># the pseudocode for these calls
-test_outs = []
-for test_batch in test_data:
-    out = test_step(test_batch)
-    test_outs.append(out)
-test_epoch_end(test_outs)
-</code></pre>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>outputs</code></strong></dt>
-<dd>List of outputs you defined in :meth:<code>test_step_end</code>, or if there
-are multiple dataloaders, a list containing a list of outputs for each dataloader</dd>
-</dl>
-<h2 id="return">Return</h2>
-<p>None</p>
-<h2 id="note">Note</h2>
-<p>If you didn't define a :meth:<code>test_step</code>, this won't be called.</p>
-<h2 id="examples">Examples</h2>
-<p>With a single dataloader:</p>
-<p>.. code-block:: python</p>
-<pre><code>def test_epoch_end(self, outputs):
-    # do something with the outputs of all test batches
-    all_test_preds = test_step_outputs.predictions
+    outputs = self.test_step_outputs
 
-    some_result = calc_all_results(all_test_preds)
-    self.log(some_result)
-</code></pre>
-<p>With multiple dataloaders, <code>outputs</code> will be a list of lists. The outer list contains
-one entry per dataloader, while the inner list contains the individual outputs of
-each test step for that dataloader.</p>
-<p>.. code-block:: python</p>
-<pre><code>def test_epoch_end(self, outputs):
-    final_value = 0
-    for dataloader_outputs in outputs:
-        for test_step_out in dataloader_outputs:
-            # do something
-            final_value += test_step_out
-
-    self.log("final_metric", final_value)
-</code></pre></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def test_epoch_end(self, outputs):
     keys = tuple(outputs[0].keys())
     results = {key: [] for key in keys}
     for d in outputs:
@@ -746,32 +685,23 @@ each test step for that dataloader.</p>
 <span>def <span class="ident">test_step</span></span>(<span>self, batch: Dict, batch_idx: int) ‑> Dict</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Operates on a single batch of data from the test set.
-In this step you'd normally generate examples or calculate anything of interest
-such as accuracy.</p>
-<p>.. code-block:: python</p>
-<pre><code># the pseudocode for these calls
-test_outs = []
-for test_batch in test_data:
-    out = test_step(test_batch)
-    test_outs.append(out)
-test_epoch_end(test_outs)
-</code></pre>
+<div class="desc"><p>Operates on a single batch of data from the test set. In this step you'd normally generate examples or
+calculate anything of interest such as accuracy.</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>batch</code></strong></dt>
-<dd>The output of your :class:<code>~torch.utils.data.DataLoader</code>.</dd>
+<dd>The output of your data iterable, normally a :class:<code>~torch.utils.data.DataLoader</code>.</dd>
 <dt><strong><code>batch_idx</code></strong></dt>
 <dd>The index of this batch.</dd>
-<dt><strong><code>dataloader_id</code></strong></dt>
+<dt><strong><code>dataloader_idx</code></strong></dt>
 <dd>The index of the dataloader that produced this batch.
-(only if multiple test dataloaders used).</dd>
+(only if multiple dataloaders used)</dd>
 </dl>
 <h2 id="return">Return</h2>
-<p>Any of.</p>
 <ul>
-<li>Any object or value</li>
-<li><code>None</code> - Testing will skip to the next batch</li>
+<li>:class:<code>~torch.Tensor</code> - The loss tensor</li>
+<li><code>dict</code> - A dictionary. Can include any keys, but must include the key <code>'loss'</code>.</li>
+<li><code>None</code> - Skip to the next batch.</li>
 </ul>
 <p>.. code-block:: python</p>
 <pre><code># if you have one test dataloader:
@@ -827,69 +757,40 @@ to training mode and gradients are enabled.</p></div>
     raise NotImplementedError()</code></pre>
 </details>
 </dd>
-<dt id="openpack_torch.lightning.BaseLightningModule.training_epoch_end"><code class="name flex">
-<span>def <span class="ident">training_epoch_end</span></span>(<span>self, outputs)</span>
+<dt id="openpack_torch.lightning.BaseLightningModule.train_val_common_step"><code class="name flex">
+<span>def <span class="ident">train_val_common_step</span></span>(<span>self, batch: Dict, batch_idx: int) ‑> Dict</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Called at the end of the training epoch with the outputs of all training steps. Use this in case you
-need to do something with all the outputs returned by :meth:<code>training_step</code>.</p>
-<p>.. code-block:: python</p>
-<pre><code># the pseudocode for these calls
-train_outs = []
-for train_batch in train_data:
-    out = training_step(train_batch)
-    train_outs.append(out)
-training_epoch_end(train_outs)
-</code></pre>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>outputs</code></strong></dt>
-<dd>List of outputs you defined in :meth:<code>training_step</code>. If there are multiple optimizers or when
-using <code>truncated_bptt_steps &gt; 0</code>, the lists have the dimensions
-(n_batches, tbptt_steps, n_optimizers). Dimensions of length 1 are squeezed.</dd>
-</dl>
-<h2 id="return">Return</h2>
-<p>None</p>
-<h2 id="note">Note</h2>
-<p>If this method is not overridden, this won't be called.</p>
-<p>.. code-block:: python</p>
-<pre><code>def training_epoch_end(self, training_step_outputs):
-    # do something with all training_step outputs
-    for out in training_step_outputs:
-        ...
-</code></pre></div>
+<div class="desc"></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def training_epoch_end(self, outputs):
-    log = dict()
-    for key in self.log_keys:
-        vals = [x[key] for x in outputs if key in x.keys()]
-        if len(vals) &gt; 0:
-            log[f&#34;train/{key}&#34;] = torch.stack(vals).mean().item()
-    self.log_dict[&#34;train&#34;].append(log)</code></pre>
+<pre><code class="python">def train_val_common_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
+    raise NotImplementedError()</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.training_step"><code class="name flex">
 <span>def <span class="ident">training_step</span></span>(<span>self, batch: Dict, batch_idx: int) ‑> Dict</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Here you compute and return the training loss and some additional metrics for e.g.
-the progress bar or logger.</p>
+<div class="desc"><p>Here you compute and return the training loss and some additional metrics for e.g. the progress bar or
+logger.</p>
 <h2 id="args">Args</h2>
-<p>batch (:class:<code>~torch.Tensor</code> | (:class:<code>~torch.Tensor</code>, &hellip;) | [:class:<code>~torch.Tensor</code>, &hellip;]):
-The output of your :class:<code>~torch.utils.data.DataLoader</code>. A tensor, tuple or list.
-batch_idx (<code>int</code>): Integer displaying index of this batch
-optimizer_idx (<code>int</code>): When using multiple optimizers, this argument will also be present.
-hiddens (<code>Any</code>): Passed in if
-:paramref:<code>~pytorch_lightning.core.module.LightningModule.truncated_bptt_steps</code> &gt; 0.</p>
+<dl>
+<dt><strong><code>batch</code></strong></dt>
+<dd>The output of your data iterable, normally a :class:<code>~torch.utils.data.DataLoader</code>.</dd>
+<dt><strong><code>batch_idx</code></strong></dt>
+<dd>The index of this batch.</dd>
+<dt><strong><code>dataloader_idx</code></strong></dt>
+<dd>The index of the dataloader that produced this batch.
+(only if multiple dataloaders used)</dd>
+</dl>
 <h2 id="return">Return</h2>
-<p>Any of.</p>
 <ul>
 <li>:class:<code>~torch.Tensor</code> - The loss tensor</li>
-<li><code>dict</code> - A dictionary. Can include any keys, but must include the key <code>'loss'</code></li>
-<li><code>None</code> - Training will skip to the next batch. This is only for automatic optimization.
+<li><code>dict</code> - A dictionary. Can include any keys, but must include the key <code>'loss'</code>.</li>
+<li><code>None</code> - Skip to the next batch. This is only supported for automatic optimization.
 This is not supported for multi-GPU, TPU, IPU, or DeepSpeed.</li>
 </ul>
 <p>In this step you'd normally do the forward pass and calculate the loss for a batch.
@@ -901,32 +802,25 @@ You can also do fancier things like multiple forward passes or something model s
     loss = self.loss(out, x)
     return loss
 </code></pre>
-<p>If you define multiple optimizers, this step will be called with an additional
-<code>optimizer_idx</code> parameter.</p>
+<p>To use multiple optimizers, you can switch to 'manual optimization' and control their stepping:</p>
 <p>.. code-block:: python</p>
-<pre><code># Multiple optimizers (e.g.: GANs)
-def training_step(self, batch, batch_idx, optimizer_idx):
-    if optimizer_idx == 0:
-        # do training_step with encoder
-        ...
-    if optimizer_idx == 1:
-        # do training_step with decoder
-        ...
-</code></pre>
-<p>If you add truncated back propagation through time you will also get an additional
-argument with the hidden states of the previous step.</p>
-<p>.. code-block:: python</p>
-<pre><code># Truncated back-propagation through time
-def training_step(self, batch, batch_idx, hiddens):
-    # hiddens are the hidden states from the previous truncated backprop step
-    out, hiddens = self.lstm(data, hiddens)
-    loss = ...
-    return {"loss": loss, "hiddens": hiddens}
+<pre><code>def __init__(self):
+    super().__init__()
+    self.automatic_optimization = False
+
+
+# Multiple optimizers (e.g.: GANs)
+def training_step(self, batch, batch_idx):
+    opt1, opt2 = self.optimizers()
+
+    # do training_step with encoder
+    ...
+    opt1.step()
+    # do training_step with decoder
+    ...
+    opt2.step()
 </code></pre>
 <h2 id="note">Note</h2>
-<p>The loss value shown in the progress bar is smoothed (averaged) over the last values,
-so it differs from the actual loss returned in train/validation step.</p>
-<h2 id="note_1">Note</h2>
 <p>When <code>accumulate_grad_batches</code> &gt; 1, the loss returned here will be automatically
 normalized by <code>accumulate_grad_batches</code> internally.</p></div>
 <details class="source">
@@ -934,121 +828,41 @@ normalized by <code>accumulate_grad_batches</code> internally.</p></div>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def training_step(self, batch: Dict, batch_idx: int) -&gt; Dict:
-    raise NotImplementedError()</code></pre>
-</details>
-</dd>
-<dt id="openpack_torch.lightning.BaseLightningModule.validation_epoch_end"><code class="name flex">
-<span>def <span class="ident">validation_epoch_end</span></span>(<span>self, outputs)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Called at the end of the validation epoch with the outputs of all validation steps.</p>
-<p>.. code-block:: python</p>
-<pre><code># the pseudocode for these calls
-val_outs = []
-for val_batch in val_data:
-    out = validation_step(val_batch)
-    val_outs.append(out)
-validation_epoch_end(val_outs)
-</code></pre>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>outputs</code></strong></dt>
-<dd>List of outputs you defined in :meth:<code>validation_step</code>, or if there
-are multiple dataloaders, a list containing a list of outputs for each dataloader.</dd>
-</dl>
-<h2 id="return">Return</h2>
-<p>None</p>
-<h2 id="note">Note</h2>
-<p>If you didn't define a :meth:<code>validation_step</code>, this won't be called.</p>
-<h2 id="examples">Examples</h2>
-<p>With a single dataloader:</p>
-<p>.. code-block:: python</p>
-<pre><code>def validation_epoch_end(self, val_step_outputs):
-    for out in val_step_outputs:
-        ...
-</code></pre>
-<p>With multiple dataloaders, <code>outputs</code> will be a list of lists. The outer list contains
-one entry per dataloader, while the inner list contains the individual outputs of
-each validation step for that dataloader.</p>
-<p>.. code-block:: python</p>
-<pre><code>def validation_epoch_end(self, outputs):
-    for dataloader_output_result in outputs:
-        dataloader_outs = dataloader_output_result.dataloader_i_outputs
+    output = self.train_val_common_step(batch, batch_idx)
 
-    self.log("final_metric", final_value)
-</code></pre></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def validation_epoch_end(self, outputs):
-    if isinstance(outputs[0], list):
-        # When multiple dataloader is used.
-        _outputs = []
-        for out in outputs:
-            _outputs += out
-        outputs = _outputs
-
-    log = dict()
-    for key in self.log_keys:
-        vals = [x[key] for x in outputs if key in x.keys()]
-        if len(vals) &gt; 0:
-            avg = torch.stack(vals).mean().item()
-            log[f&#34;val/{key}&#34;] = avg
-    self.log_dict[&#34;val&#34;].append(log)
-
-    self.print_latest_metrics()
-
-    if len(self.log_dict[&#34;val&#34;]) &gt; 0:
-        val_loss = self.log_dict[&#34;val&#34;][-1].get(&#34;val/loss&#34;, None)
-        self.log(
-            &#34;val/loss&#34;,
-            val_loss,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=False,
-            logger=True)</code></pre>
+    train_output = {f&#34;train/{key}&#34;: val for key, val in output.items()}
+    self.log_dict(
+        train_output,
+        on_step=False,
+        on_epoch=True,
+        prog_bar=True,
+        logger=True,
+    )
+    return output</code></pre>
 </details>
 </dd>
 <dt id="openpack_torch.lightning.BaseLightningModule.validation_step"><code class="name flex">
 <span>def <span class="ident">validation_step</span></span>(<span>self, batch: Dict, batch_idx: int, dataloader_idx: int = 0) ‑> Dict</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Operates on a single batch of data from the validation set.
-In this step you'd might generate examples or calculate anything of interest like accuracy.</p>
-<p>.. code-block:: python</p>
-<pre><code># the pseudocode for these calls
-val_outs = []
-for val_batch in val_data:
-    out = validation_step(val_batch)
-    val_outs.append(out)
-validation_epoch_end(val_outs)
-</code></pre>
+<div class="desc"><p>Operates on a single batch of data from the validation set. In this step you'd might generate examples or
+calculate anything of interest like accuracy.</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>batch</code></strong></dt>
-<dd>The output of your :class:<code>~torch.utils.data.DataLoader</code>.</dd>
+<dd>The output of your data iterable, normally a :class:<code>~torch.utils.data.DataLoader</code>.</dd>
 <dt><strong><code>batch_idx</code></strong></dt>
 <dd>The index of this batch.</dd>
 <dt><strong><code>dataloader_idx</code></strong></dt>
 <dd>The index of the dataloader that produced this batch.
-(only if multiple val dataloaders used)</dd>
+(only if multiple dataloaders used)</dd>
 </dl>
 <h2 id="return">Return</h2>
 <ul>
-<li>Any object or value</li>
-<li><code>None</code> - Validation will skip to the next batch</li>
+<li>:class:<code>~torch.Tensor</code> - The loss tensor</li>
+<li><code>dict</code> - A dictionary. Can include any keys, but must include the key <code>'loss'</code>.</li>
+<li><code>None</code> - Skip to the next batch.</li>
 </ul>
-<p>.. code-block:: python</p>
-<pre><code># pseudocode of order
-val_outs = []
-for val_batch in val_data:
-    out = validation_step(val_batch)
-    if defined("validation_step_end"):
-        out = validation_step_end(out)
-    val_outs.append(out)
-val_outs = validation_epoch_end(val_outs)
-</code></pre>
 <p>.. code-block:: python</p>
 <pre><code># if you have one val dataloader:
 def validation_step(self, batch, batch_idx):
@@ -1100,14 +914,41 @@ the model goes back to training mode and gradients are enabled.</p></div>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def validation_step(
-        self,
-        batch: Dict,
-        batch_idx: int,
-        dataloader_idx: int = 0) -&gt; Dict:
-    return self.training_step(batch, batch_idx)</code></pre>
+    self, batch: Dict, batch_idx: int, dataloader_idx: int = 0
+) -&gt; Dict:
+    output = self.train_val_common_step(batch, batch_idx)
+
+    train_output = {f&#34;val/{key}&#34;: val for key, val in output.items()}
+    self.log_dict(
+        train_output,
+        on_step=False,
+        on_epoch=True,
+        prog_bar=True,
+        logger=True,
+    )
+    return output</code></pre>
 </details>
 </dd>
 </dl>
+</dd>
+<dt id="openpack_torch.lightning.EarlyStopError"><code class="flex name class">
+<span>class <span class="ident">EarlyStopError</span></span>
+<span>(</span><span>*args, **kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Common base class for all non-exit exceptions.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class EarlyStopError(Exception):
+    pass</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>builtins.Exception</li>
+<li>builtins.BaseException</li>
+</ul>
 </dd>
 </dl>
 </section>
@@ -1129,20 +970,20 @@ the model goes back to training mode and gradients are enabled.</p></div>
 <h4><code><a title="openpack_torch.lightning.BaseLightningModule" href="#openpack_torch.lightning.BaseLightningModule">BaseLightningModule</a></code></h4>
 <ul class="">
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.calc_accuracy" href="#openpack_torch.lightning.BaseLightningModule.calc_accuracy">calc_accuracy</a></code></li>
+<li><code><a title="openpack_torch.lightning.BaseLightningModule.clear_test_outputs" href="#openpack_torch.lightning.BaseLightningModule.clear_test_outputs">clear_test_outputs</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.configure_optimizers" href="#openpack_torch.lightning.BaseLightningModule.configure_optimizers">configure_optimizers</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.forward" href="#openpack_torch.lightning.BaseLightningModule.forward">forward</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.init_criterion" href="#openpack_torch.lightning.BaseLightningModule.init_criterion">init_criterion</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.init_model" href="#openpack_torch.lightning.BaseLightningModule.init_model">init_model</a></code></li>
-<li><code><a title="openpack_torch.lightning.BaseLightningModule.log_dict" href="#openpack_torch.lightning.BaseLightningModule.log_dict">log_dict</a></code></li>
-<li><code><a title="openpack_torch.lightning.BaseLightningModule.log_keys" href="#openpack_torch.lightning.BaseLightningModule.log_keys">log_keys</a></code></li>
-<li><code><a title="openpack_torch.lightning.BaseLightningModule.print_latest_metrics" href="#openpack_torch.lightning.BaseLightningModule.print_latest_metrics">print_latest_metrics</a></code></li>
-<li><code><a title="openpack_torch.lightning.BaseLightningModule.test_epoch_end" href="#openpack_torch.lightning.BaseLightningModule.test_epoch_end">test_epoch_end</a></code></li>
+<li><code><a title="openpack_torch.lightning.BaseLightningModule.on_test_epoch_end" href="#openpack_torch.lightning.BaseLightningModule.on_test_epoch_end">on_test_epoch_end</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.test_step" href="#openpack_torch.lightning.BaseLightningModule.test_step">test_step</a></code></li>
-<li><code><a title="openpack_torch.lightning.BaseLightningModule.training_epoch_end" href="#openpack_torch.lightning.BaseLightningModule.training_epoch_end">training_epoch_end</a></code></li>
+<li><code><a title="openpack_torch.lightning.BaseLightningModule.train_val_common_step" href="#openpack_torch.lightning.BaseLightningModule.train_val_common_step">train_val_common_step</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.training_step" href="#openpack_torch.lightning.BaseLightningModule.training_step">training_step</a></code></li>
-<li><code><a title="openpack_torch.lightning.BaseLightningModule.validation_epoch_end" href="#openpack_torch.lightning.BaseLightningModule.validation_epoch_end">validation_epoch_end</a></code></li>
 <li><code><a title="openpack_torch.lightning.BaseLightningModule.validation_step" href="#openpack_torch.lightning.BaseLightningModule.validation_step">validation_step</a></code></li>
 </ul>
+</li>
+<li>
+<h4><code><a title="openpack_torch.lightning.EarlyStopError" href="#openpack_torch.lightning.EarlyStopError">EarlyStopError</a></code></h4>
 </li>
 </ul>
 </li>
